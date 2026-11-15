@@ -459,6 +459,19 @@ function AbaPedidos({
     });
   }
 
+  async function excluirPedido(p) {
+    const resumoPedido = `Pedido nº ${p.id} — ${p.mesa || 'sem mesa'} — ${formatarMoeda(p.total)}`;
+    if (!confirm(`Excluir este pedido?\n\n${resumoPedido}\n\nEle some do histórico e do relatório e NÃO pode ser recuperado.`)) return;
+    try {
+      await api(`/pedidos/${p.id}`, { method: 'DELETE' });
+      setPedidos((atual) => atual.filter((x) => x.id !== p.id));
+      setExpandidoId(null);
+      api('/resumo?mes=' + mes).then(setResumo);
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
   async function alterarStatus(id, status) {
     await api(`/pedidos/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
     setPedidos((atual) => atual.map((p) => (p.id === id ? { ...p, status } : p)));
@@ -530,12 +543,13 @@ function AbaPedidos({
               <th>Status</th>
               <th>Cozinha</th>
               <th>Conta</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {pedidos.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', color: '#888' }}>
+                <td colSpan={8} style={{ textAlign: 'center', color: '#888' }}>
                   Nenhum pedido neste mês.
                 </td>
               </tr>
@@ -594,10 +608,15 @@ function AbaPedidos({
                         </button>
                       )}
                     </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button className="btn-perigo" onClick={() => excluirPedido(p)} type="button">
+                        Excluir
+                      </button>
+                    </td>
                   </tr>
                   {aberto && (
                     <tr style={{ background: '#faf7f2' }}>
-                      <td colSpan={7}>
+                      <td colSpan={8}>
                         {p.itens.map((i) => (
                           <div
                             key={i.id}

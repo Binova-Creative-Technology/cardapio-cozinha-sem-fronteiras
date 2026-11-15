@@ -1,0 +1,21 @@
+import { requireAuth } from '@/lib/auth';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
+
+// Exclui um pedido (os itens dele saem junto, pela chave estrangeira com "on delete cascade").
+export async function DELETE(request, { params }) {
+  const naoAutenticado = await requireAuth();
+  if (naoAutenticado) return naoAutenticado;
+
+  const { id } = await params;
+  const pedidoId = Number(id);
+  if (!Number.isInteger(pedidoId)) return Response.json({ erro: 'Pedido inválido.' }, { status: 400 });
+
+  const db = supabaseAdmin();
+  const { data: existente } = await db.from('csf_pedidos').select('id').eq('id', pedidoId).maybeSingle();
+  if (!existente) return Response.json({ erro: 'Pedido não encontrado.' }, { status: 404 });
+
+  const { error } = await db.from('csf_pedidos').delete().eq('id', pedidoId);
+  if (error) return Response.json({ erro: error.message }, { status: 500 });
+
+  return Response.json({ ok: true });
+}
