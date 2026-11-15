@@ -444,6 +444,8 @@ button.btn-perigo { background: #fdecea; color: #a3352b; border: none; padding: 
 .linha-estoque.filha { padding-left: 18px; }
 .linha-estoque.filha .nome-estoque { font-weight: 400; }
 .linha-estoque input { width: 120px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }
+.linha-estoque .input-un { width: 64px; }
+.linha-estoque .rotulo-un { font-size: 0.8rem; color: #777; white-space: nowrap; }
 .grupo-estoque { margin: 6px 0 0 18px; font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: 0.03em; }
 .selo-estoque { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; margin-left: 6px; }
 .selo-estoque.sem { background: #eee; color: #777; }

@@ -830,8 +830,15 @@ function SeloEstoque({ estoque }) {
 
 function LinhaEstoque({ tipo, item, nivel, rascunhos, setRascunhos, onSalvar }) {
   const chave = `${tipo}-${item.id}`;
+  const chaveUn = `${chave}-un`;
   const valorTela = chave in rascunhos ? rascunhos[chave] : item.estoque === null ? '' : String(item.estoque);
-  const alterado = chave in rascunhos;
+  const unTela = chaveUn in rascunhos ? rascunhos[chaveUn] : String(item.unidadesPorcao || 1);
+  const alterado = chave in rascunhos || chaveUn in rascunhos;
+  const ehPrato = tipo === 'prato';
+
+  // porções que ainda dá para vender, com o que está digitado na tela
+  const unNum = Math.max(1, Number(unTela) || 1);
+  const porcoes = valorTela === '' ? null : Math.floor((Number(valorTela) || 0) / unNum);
 
   return (
     <div className={'linha-estoque' + (nivel ? ' filha' : '')}>
@@ -839,19 +846,37 @@ function LinhaEstoque({ tipo, item, nivel, rascunhos, setRascunhos, onSalvar }) 
         {item.nome}
         {item.ativo === false && <span className="selo-estoque sem">Desativado</span>}
       </div>
-      <SeloEstoque estoque={item.estoque} />
+      <SeloEstoque estoque={item.estoque === null ? null : ehPrato ? item.porcoes : item.estoque} />
       <input
         type="number"
         min="0"
         step="1"
-        placeholder="sem controle"
+        placeholder={ehPrato ? 'unidades' : 'sem controle'}
+        title={ehPrato ? 'Unidades em estoque (deixe em branco para não controlar)' : 'Quantidade em estoque'}
         value={valorTela}
         onChange={(e) => setRascunhos((atual) => ({ ...atual, [chave]: e.target.value }))}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') onSalvar(tipo, item.id, valorTela, chave);
+          if (e.key === 'Enter') onSalvar(tipo, item, chave);
         }}
       />
-      <button className="btn" type="button" disabled={!alterado} onClick={() => onSalvar(tipo, item.id, valorTela, chave)}>
+      {ehPrato && (
+        <>
+          <span className="rotulo-un">un. por porção</span>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            className="input-un"
+            value={unTela}
+            onChange={(e) => setRascunhos((atual) => ({ ...atual, [chaveUn]: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onSalvar(tipo, item, chave);
+            }}
+          />
+          <span className="rotulo-un">= {porcoes === null ? 'sem controle' : `${porcoes} ${porcoes === 1 ? 'porção' : 'porções'}`}</span>
+        </>
+      )}
+      <button className="btn" type="button" disabled={!alterado} onClick={() => onSalvar(tipo, item, chave)}>
         Salvar
       </button>
     </div>
@@ -872,11 +897,24 @@ function AbaEstoque({ gatilhoAtualizacao }) {
     carregar();
   }, [carregar, gatilhoAtualizacao]);
 
-  async function salvar(tipo, id, valor, chave) {
+  async function salvar(tipo, item, chave) {
     try {
-      await api('/estoque', { method: 'PATCH', body: JSON.stringify({ tipo, id, estoque: valor === '' ? null : valor }) });
+      const chaveUn = `${chave}-un`;
+      if (chave in rascunhos) {
+        const valor = rascunhos[chave];
+        await api('/estoque', {
+          method: 'PATCH',
+          body: JSON.stringify({ tipo, id: item.id, estoque: valor === '' ? null : valor }),
+        });
+      }
+      if (tipo === 'prato' && chaveUn in rascunhos) {
+        await api('/estoque', {
+          method: 'PATCH',
+          body: JSON.stringify({ tipo: 'unidades', id: item.id, unidades: rascunhos[chaveUn] }),
+        });
+      }
       setRascunhos((atual) => {
-        const { [chave]: _descartado, ...resto } = atual;
+        const { [chave]: _a, [chaveUn]: _b, ...resto } = atual;
         return resto;
       });
       carregar();
@@ -893,10 +931,11 @@ function AbaEstoque({ gatilhoAtualizacao }) {
       <div className="cartao">
         <h3>Como funciona o estoque</h3>
         <p style={{ margin: 0, fontSize: '0.9rem', color: '#555', lineHeight: 1.45 }}>
-          Digite quantas unidades você tem e clique em <b>Salvar</b>. A cada pedido, o sistema <b>desconta sozinho</b>:
-          1 do prato e 1 de cada opção escolhida (arroz, proteína...), por unidade. Quando chega a <b>0</b>, o item
-          aparece como <b>Esgotado</b> para o cliente e ninguém consegue pedir. Pedido <b>cancelado ou excluído devolve</b> as
-          unidades. <b>Deixe em branco</b> para não controlar aquele item.
+          Digite o estoque em <b>unidades</b> e clique em <b>Salvar</b>. Em <b>"un. por porção"</b> diga quantas
+          unidades vão em cada prato pedido: um salgado de <b>3 un.</b> gasta 3 do estoque a cada pedido (já vem
+          preenchido pelo campo "Qtd" do prato, ex: "3 un"). A cada pedido o sistema <b>desconta sozinho</b>, e as
+          opções escolhidas (arroz, proteína...) descontam 1 por prato. Quando acaba, o item aparece como <b>Esgotado</b>{' '}
+          para o cliente. Pedido <b>cancelado ou excluído devolve</b>. <b>Deixe em branco</b> para não controlar.
         </p>
       </div>
 

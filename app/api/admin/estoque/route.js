@@ -1,5 +1,6 @@
 import { requireAuth } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { unidadesPorPorcao } from '@/lib/estoque';
 
 // Lista o estoque de todos os pratos e de cada opção. estoque = null significa "sem controle".
 export async function GET() {
@@ -12,7 +13,7 @@ export async function GET() {
 
   const { data: pratos, error: erroPratos } = await db
     .from('csf_pratos')
-    .select('id, categoria_id, nome, estoque, ativo')
+    .select('id, categoria_id, nome, estoque, ativo, quantidade, unidades_porcao')
     .order('ordem')
     .order('id');
   if (erroPratos) return Response.json({ erro: erroPratos.message }, { status: 500 });
@@ -42,6 +43,8 @@ export async function GET() {
           nome: p.nome,
           ativo: p.ativo,
           estoque: p.estoque,
+          unidadesPorcao: unidadesPorPorcao(p),
+          porcoes: p.estoque === null ? null : Math.floor(p.estoque / unidadesPorPorcao(p)),
           grupos: grupos
             .filter((g) => g.prato_id === p.id)
             .map((g) => ({
@@ -68,8 +71,19 @@ export async function PATCH(request) {
   const { tipo, id } = body || {};
   let { estoque } = body || {};
 
-  if (!['prato', 'opcao'].includes(tipo) || !Number.isInteger(Number(id))) {
+  if (!['prato', 'opcao', 'unidades'].includes(tipo) || !Number.isInteger(Number(id))) {
     return Response.json({ erro: 'Dados inválidos.' }, { status: 400 });
+  }
+
+  // Unidades que cada porção do prato consome (ex: salgado = 3)
+  if (tipo === 'unidades') {
+    const un = Number(body.unidades);
+    if (!Number.isInteger(un) || un < 1 || un > 1000) {
+      return Response.json({ erro: 'Unidades por porção: número inteiro de 1 a 1000.' }, { status: 400 });
+    }
+    const { error } = await supabaseAdmin().from('csf_pratos').update({ unidades_porcao: un }).eq('id', Number(id));
+    if (error) return Response.json({ erro: error.message }, { status: 500 });
+    return Response.json({ ok: true });
   }
   if (estoque === '' || estoque === null || estoque === undefined) {
     estoque = null;

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { gruposDosPratos } from '@/lib/opcoes';
+import { unidadesPorPorcao } from '@/lib/estoque';
 
 export async function GET() {
   const db = supabaseAdmin();
@@ -13,7 +14,7 @@ export async function GET() {
 
   const { data: pratos, error: erroPratos } = await db
     .from('csf_pratos')
-    .select('id, categoria_id, nome, descricao, preco, foto, tempo_preparo, peso, quantidade, observacao, estoque')
+    .select('id, categoria_id, nome, descricao, preco, foto, tempo_preparo, peso, quantidade, observacao, estoque, unidades_porcao')
     .eq('ativo', true)
     .order('ordem')
     .order('id');
@@ -32,7 +33,15 @@ export async function GET() {
       nome: cat.nome,
       pratos: pratos
         .filter((p) => p.categoria_id === cat.id)
-        .map((p) => ({ ...p, grupos: grupos[p.id] || [] })),
+        .map(({ unidades_porcao, ...p }) => ({
+          ...p,
+          // O estoque do prato é em unidades; o cliente vê quantas PORÇÕES ainda dá para pedir.
+          estoque:
+            p.estoque === null || p.estoque === undefined
+              ? null
+              : Math.floor(p.estoque / unidadesPorPorcao({ quantidade: p.quantidade, unidades_porcao })),
+          grupos: grupos[p.id] || [],
+        })),
     }))
     .filter((cat) => cat.pratos.length > 0);
 

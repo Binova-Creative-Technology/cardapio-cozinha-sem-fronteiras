@@ -179,6 +179,12 @@ alter table csf_pratos add column if not exists estoque integer;
 alter table csf_opcoes add column if not exists estoque integer;
 alter table csf_itens_pedido add column if not exists opcoes_ids text default '';
 
+-- O estoque do prato é em UNIDADES; cada porção pedida consome unidades_porcao unidades
+-- (NULL = deduz do texto de "quantidade" do prato, ex: "3 un" -> 3; ou 1).
+alter table csf_pratos add column if not exists unidades_porcao integer;
+-- Unidades que o item do pedido tirou do estoque do prato (NULL = não mexeu no estoque).
+alter table csf_itens_pedido add column if not exists baixa_estoque integer;
+
 -- Baixa atômica. Retorna: -1 = sem controle de estoque, -2 = estoque insuficiente,
 -- >= 0 = estoque restante. Com p_forcar = true nunca recusa (para no zero).
 create or replace function csf_baixar_estoque(p_tipo text, p_id bigint, p_qtd integer, p_forcar boolean default false)
