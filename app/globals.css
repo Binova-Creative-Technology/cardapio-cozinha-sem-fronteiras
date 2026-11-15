@@ -429,6 +429,25 @@ button.btn { background: #a3352b; color: #fff; border: none; padding: 9px 16px; 
 button.btn-secundario { background: #eee; color: #333; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; }
 button.btn-perigo { background: #fdecea; color: #a3352b; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
 
+/* Pedido novo (status "recebido"): linha piscando em vermelho até a equipe mudar o status */
+@keyframes piscar-pedido {
+  0%, 100% { background: #ffffff; color: inherit; }
+  50% { background: #e53935; color: #ffffff; }
+}
+tr.pedido-novo { animation: piscar-pedido 1s ease-in-out infinite; }
+tr.pedido-novo td { font-weight: 700; }
+.selo-novo {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #b71c1c;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+tr.pedido-novo .selo-novo { background: #fff; color: #b71c1c; }
+
 .categoria-bloco { margin-bottom: 18px; }
 .categoria-bloco h3 { display: flex; justify-content: space-between; align-items: center; }
 

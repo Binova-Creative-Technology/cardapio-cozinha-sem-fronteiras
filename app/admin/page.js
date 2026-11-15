@@ -553,10 +553,14 @@ function AbaPedidos({
               return (
                 <Fragment key={p.id}>
                   <tr
+                    className={p.status === 'recebido' ? 'pedido-novo' : undefined}
                     onClick={() => setExpandidoId(aberto ? null : p.id)}
-                    style={{ cursor: 'pointer', background: aberto ? '#faf7f2' : undefined }}
+                    style={{ cursor: 'pointer', background: aberto && p.status !== 'recebido' ? '#faf7f2' : undefined }}
                   >
-                    <td>{hora}</td>
+                    <td>
+                      {p.status === 'recebido' && <span className="selo-novo">NOVO</span>}
+                      {hora}
+                    </td>
                     <td>{p.mesa || '-'}</td>
                     <td>
                       {aberto ? '▾' : '▸'} {totalItens} {totalItens === 1 ? 'item' : 'itens'}
