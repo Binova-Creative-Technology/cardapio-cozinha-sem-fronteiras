@@ -554,18 +554,38 @@ function AbaPedidos({
                 </td>
               </tr>
             )}
-            {pedidos.map((p) => {
-              const hora = new Date(p.criado_em).toLocaleString('pt-BR', {
-                day: '2-digit',
-                month: '2-digit',
+            {pedidos.map((p, idxPedido) => {
+              const hora = new Date(p.criado_em).toLocaleTimeString('pt-BR', {
                 hour: '2-digit',
                 minute: '2-digit',
+                timeZone: 'America/Sao_Paulo',
               });
+              const dia = diaBR(p.criado_em);
+              const novoDia = idxPedido === 0 || diaBR(pedidos[idxPedido - 1].criado_em) !== dia;
+              const doDia = pedidos.filter((x) => diaBR(x.criado_em) === dia);
+              const validosDoDia = doDia.filter((x) => x.status !== 'cancelado');
+              const totalDoDia = validosDoDia.reduce((soma, x) => soma + Number(x.total), 0);
+              const hojeBR = diaBR(new Date().toISOString());
               const aberto = expandidoId === p.id;
               const totalItens = p.itens.reduce((soma, i) => soma + i.quantidade, 0);
               const fechado = p.status !== 'cancelado' && contaFechada(p);
               return (
                 <Fragment key={p.id}>
+                  {novoDia && (
+                    <tr className="linha-dia">
+                      <td colSpan={8}>
+                        <strong>
+                          {dia === hojeBR ? 'Hoje — ' : ''}
+                          {formatarDiaLabel(dia)}
+                        </strong>
+                        <span>
+                          {' '}
+                          · {validosDoDia.length} {validosDoDia.length === 1 ? 'pedido' : 'pedidos'} ·{' '}
+                          {formatarMoeda(totalDoDia)}
+                        </span>
+                      </td>
+                    </tr>
+                  )}
                   <tr
                     className={p.status === 'recebido' ? 'pedido-novo' : undefined}
                     onClick={() => setExpandidoId(aberto ? null : p.id)}

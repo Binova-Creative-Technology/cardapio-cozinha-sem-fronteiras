@@ -429,6 +429,15 @@ button.btn { background: #a3352b; color: #fff; border: none; padding: 9px 16px; 
 button.btn-secundario { background: #eee; color: #333; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; }
 button.btn-perigo { background: #fdecea; color: #a3352b; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
 
+/* Cabeçalho de cada dia na lista de pedidos */
+tr.linha-dia td {
+  background: #a3352b;
+  color: #fff;
+  padding: 8px 12px;
+  font-size: 0.95rem;
+}
+tr.linha-dia td span { font-weight: 400; opacity: 0.95; }
+
 /* Pedido novo (status "recebido"): linha piscando em vermelho até a equipe mudar o status */
 @keyframes piscar-pedido {
   0%, 100% { background: #ffffff; color: inherit; }
