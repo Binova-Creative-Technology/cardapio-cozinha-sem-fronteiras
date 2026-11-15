@@ -819,77 +819,21 @@ function AbaRelatorio({ gatilhoAtualizacao }) {
   );
 }
 
-const ESTOQUE_BAIXO = 5;
-
-function SeloEstoque({ estoque }) {
-  if (estoque === null || estoque === undefined) return <span className="selo-estoque sem">Sem controle</span>;
-  if (estoque === 0) return <span className="selo-estoque zero">ESGOTADO</span>;
-  if (estoque <= ESTOQUE_BAIXO) return <span className="selo-estoque baixo">Acabando</span>;
-  return <span className="selo-estoque ok">Em estoque</span>;
-}
-
-function LinhaEstoque({ tipo, item, nivel, rascunhos, setRascunhos, onSalvar }) {
-  const chave = `${tipo}-${item.id}`;
-  const chaveUn = `${chave}-un`;
-  const valorTela = chave in rascunhos ? rascunhos[chave] : item.estoque === null ? '' : String(item.estoque);
-  const unTela = chaveUn in rascunhos ? rascunhos[chaveUn] : String(item.unidadesPorcao || 1);
-  const alterado = chave in rascunhos || chaveUn in rascunhos;
-  const ehPrato = tipo === 'prato';
-
-  // porções que ainda dá para vender, com o que está digitado na tela
-  const unNum = Math.max(1, Number(unTela) || 1);
-  const porcoes = valorTela === '' ? null : Math.floor((Number(valorTela) || 0) / unNum);
-
-  return (
-    <div className={'linha-estoque' + (nivel ? ' filha' : '')}>
-      <div className="nome-estoque">
-        {item.nome}
-        {item.ativo === false && <span className="selo-estoque sem">Desativado</span>}
-      </div>
-      <SeloEstoque estoque={item.estoque === null ? null : ehPrato ? item.porcoes : item.estoque} />
-      <input
-        type="number"
-        min="0"
-        step="1"
-        placeholder={ehPrato ? 'unidades' : 'sem controle'}
-        title={ehPrato ? 'Unidades em estoque (deixe em branco para não controlar)' : 'Quantidade em estoque'}
-        value={valorTela}
-        onChange={(e) => setRascunhos((atual) => ({ ...atual, [chave]: e.target.value }))}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') onSalvar(tipo, item, chave);
-        }}
-      />
-      {ehPrato && (
-        <>
-          <span className="rotulo-un">un. por porção</span>
-          <input
-            type="number"
-            min="1"
-            step="1"
-            className="input-un"
-            value={unTela}
-            onChange={(e) => setRascunhos((atual) => ({ ...atual, [chaveUn]: e.target.value }))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onSalvar(tipo, item, chave);
-            }}
-          />
-          <span className="rotulo-un">= {porcoes === null ? 'sem controle' : `${porcoes} ${porcoes === 1 ? 'porção' : 'porções'}`}</span>
-        </>
-      )}
-      <button className="btn" type="button" disabled={!alterado} onClick={() => onSalvar(tipo, item, chave)}>
-        Salvar
-      </button>
-    </div>
-  );
-}
+const ESTOQUE_BAIXO = 10;
 
 function AbaEstoque({ gatilhoAtualizacao }) {
-  const [categorias, setCategorias] = useState(null);
-  const [rascunhos, setRascunhos] = useState({});
+  const [dados, setDados] = useState(null); // { itens, cardapio }
+  const [rascunhos, setRascunhos] = useState({}); // quantidade digitada por item
+  const [entradas, setEntradas] = useState({}); // "entrada" digitada por item
+  const [novoNome, setNovoNome] = useState('');
+  const [novaQtd, setNovaQtd] = useState('');
+  const [editando, setEditando] = useState(null); // "prato:ID" ou "opcao:ID" em edição
+  const [linhas, setLinhas] = useState([]); // [{ itemId, unidades }] da edição
+  const [ocupado, setOcupado] = useState(false);
 
   const carregar = useCallback(() => {
     api('/estoque')
-      .then(setCategorias)
+      .then(setDados)
       .catch((err) => alert(err.message));
   }, []);
 
@@ -897,80 +841,270 @@ function AbaEstoque({ gatilhoAtualizacao }) {
     carregar();
   }, [carregar, gatilhoAtualizacao]);
 
-  async function salvar(tipo, item, chave) {
+  async function chamar(caminho, opcoes) {
     try {
-      const chaveUn = `${chave}-un`;
-      if (chave in rascunhos) {
-        const valor = rascunhos[chave];
-        await api('/estoque', {
-          method: 'PATCH',
-          body: JSON.stringify({ tipo, id: item.id, estoque: valor === '' ? null : valor }),
-        });
-      }
-      if (tipo === 'prato' && chaveUn in rascunhos) {
-        await api('/estoque', {
-          method: 'PATCH',
-          body: JSON.stringify({ tipo: 'unidades', id: item.id, unidades: rascunhos[chaveUn] }),
-        });
-      }
-      setRascunhos((atual) => {
-        const { [chave]: _a, [chaveUn]: _b, ...resto } = atual;
-        return resto;
-      });
+      const r = await api(caminho, opcoes);
       carregar();
+      return r;
     } catch (err) {
       alert(err.message);
+      return null;
     }
   }
 
-  if (!categorias) return <div className="vazio">Carregando estoque...</div>;
-  if (categorias.length === 0) return <div className="vazio">Cadastre pratos no Cardápio primeiro.</div>;
+  async function criarItem() {
+    if (!novoNome.trim()) return alert('Dê um nome ao item.');
+    const r = await chamar('/estoque', {
+      method: 'POST',
+      body: JSON.stringify({ nome: novoNome, quantidade: novaQtd }),
+    });
+    if (r) {
+      setNovoNome('');
+      setNovaQtd('');
+    }
+  }
+
+  async function salvarQuantidade(item) {
+    const r = await chamar('/estoque', {
+      method: 'PATCH',
+      body: JSON.stringify({ id: item.id, quantidade: rascunhos[item.id] }),
+    });
+    if (r) {
+      setRascunhos(({ [item.id]: _descartado, ...resto }) => resto);
+    }
+  }
+
+  async function darEntrada(item) {
+    const n = Number(entradas[item.id]);
+    if (!Number.isInteger(n) || n === 0) return alert('Digite quantas unidades entraram (ex: 30).');
+    const r = await chamar('/estoque', { method: 'PATCH', body: JSON.stringify({ id: item.id, somar: n }) });
+    if (r) setEntradas(({ [item.id]: _descartado, ...resto }) => resto);
+  }
+
+  async function renomear(item) {
+    const nome = prompt('Novo nome do item:', item.nome);
+    if (nome === null || !nome.trim()) return;
+    await chamar('/estoque', { method: 'PATCH', body: JSON.stringify({ id: item.id, nome }) });
+  }
+
+  async function excluirItem(item) {
+    if (!confirm(`Excluir o item "${item.nome}"? Os pratos e opções que gastam dele deixam de controlar esse item.`)) return;
+    await chamar('/estoque?id=' + item.id, { method: 'DELETE' });
+  }
+
+  async function lerNomes() {
+    if (
+      !confirm(
+        'O sistema vai ler os nomes das opções e dos pratos (ex: "3 kibe de carne", "2 Espetos de Kafta", "Qtd: 3 un") e montar o que cada um gasta. Só preenche o que ainda está vazio e cria itens SEM quantidade (nada vira "esgotado" até você digitar). Continuar?',
+      )
+    )
+      return;
+    setOcupado(true);
+    const r = await chamar('/estoque/auto', { method: 'POST' });
+    setOcupado(false);
+    if (r) alert(`Pronto: ${r.itensCriados} itens criados e ${r.ligacoes} ligações montadas. Confira abaixo e digite as quantidades.`);
+  }
+
+  function abrirEdicao(tipo, id, consumo) {
+    setEditando(`${tipo}:${id}`);
+    setLinhas(consumo.length ? consumo.map((c) => ({ ...c })) : [{ itemId: '', unidades: 1 }]);
+  }
+
+  async function salvarEdicao() {
+    const [tipo, id] = editando.split(':');
+    const consumo = linhas
+      .filter((l) => l.itemId)
+      .map((l) => ({ itemId: Number(l.itemId), unidades: Number(l.unidades) || 1 }));
+    const r = await chamar('/estoque/consumo', { method: 'PUT', body: JSON.stringify({ tipo, id: Number(id), consumo }) });
+    if (r) setEditando(null);
+  }
+
+  if (!dados) return <div className="vazio">Carregando estoque...</div>;
+  const { itens, cardapio } = dados;
+  const nomeDoItem = (id) => itens.find((i) => i.id === id)?.nome || '?';
+
+  // (função comum, não componente: assim os campos não perdem o foco a cada tecla)
+  function renderConsumo({ tipo, id, nome, consumo, filho }) {
+    const chave = `${tipo}:${id}`;
+    const aberto = editando === chave;
+    return (
+      <div className={'linha-consumo' + (filho ? ' filha' : '')}>
+        <div className="resumo-consumo">
+          <span className="nome-estoque">{nome}</span>
+          <span className="chips-consumo">
+            {consumo.length === 0 ? (
+              <span className="selo-estoque sem">não controla</span>
+            ) : (
+              consumo.map((c) => (
+                <span className="selo-estoque ok" key={c.itemId}>
+                  {c.unidades} × {nomeDoItem(c.itemId)}
+                </span>
+              ))
+            )}
+          </span>
+          <button className="btn-secundario" type="button" onClick={() => (aberto ? setEditando(null) : abrirEdicao(tipo, id, consumo))}>
+            {aberto ? 'Fechar' : 'Editar'}
+          </button>
+        </div>
+        {aberto && (
+          <div className="editor-consumo">
+            <div className="dica-consumo">Gasta, a cada porção pedida:</div>
+            {linhas.map((l, i) => (
+              <div className="linha-form" key={i} style={{ marginBottom: 4 }}>
+                <input
+                  type="number"
+                  min="1"
+                  value={l.unidades}
+                  style={{ maxWidth: 80 }}
+                  onChange={(e) => setLinhas((atual) => atual.map((x, j) => (j === i ? { ...x, unidades: e.target.value } : x)))}
+                />
+                <span>un. de</span>
+                <select
+                  value={l.itemId}
+                  onChange={(e) => setLinhas((atual) => atual.map((x, j) => (j === i ? { ...x, itemId: e.target.value } : x)))}
+                >
+                  <option value="">Escolha o item...</option>
+                  {itens.map((it) => (
+                    <option key={it.id} value={it.id}>
+                      {it.nome}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn-secundario" type="button" onClick={() => setLinhas((atual) => atual.filter((_, j) => j !== i))}>
+                  ✕
+                </button>
+              </div>
+            ))}
+            <div className="linha-form" style={{ marginBottom: 0 }}>
+              <button className="btn-secundario" type="button" onClick={() => setLinhas((atual) => [...atual, { itemId: '', unidades: 1 }])}>
+                + Outro item
+              </button>
+              <button className="btn" type="button" onClick={salvarEdicao}>
+                Salvar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
       <div className="cartao">
         <h3>Como funciona o estoque</h3>
         <p style={{ margin: 0, fontSize: '0.9rem', color: '#555', lineHeight: 1.45 }}>
-          Digite o estoque em <b>unidades</b> e clique em <b>Salvar</b>. Em <b>"un. por porção"</b> diga quantas
-          unidades vão em cada prato pedido: um salgado de <b>3 un.</b> gasta 3 do estoque a cada pedido (já vem
-          preenchido pelo campo "Qtd" do prato, ex: "3 un"). A cada pedido o sistema <b>desconta sozinho</b>, e as
-          opções escolhidas (arroz, proteína...) descontam 1 por prato. Quando acaba, o item aparece como <b>Esgotado</b>{' '}
-          para o cliente. Pedido <b>cancelado ou excluído devolve</b>. <b>Deixe em branco</b> para não controlar.
+          <b>1.</b> Cadastre os <b>itens</b> que você tem na cozinha e quantas <b>unidades</b> (ex: Kibe de carne = 120,
+          Espeto de Kafta = 40). <b>2.</b> Diga o que cada prato e cada opção <b>gasta</b>: a opção "3 kibe de carne"
+          gasta 3 un. de Kibe de carne; "1 Espeto de Kafta e 1 Espeto de Frango" gasta 1 de cada. <b>3.</b> A cada
+          pedido o sistema <b>desconta sozinho</b>. Quando o item acaba, as escolhas que dependem dele aparecem como{' '}
+          <b>Esgotado</b> para o cliente. Pedido <b>cancelado ou excluído devolve</b>. Item com quantidade em branco = sem
+          controle.
         </p>
+        <div style={{ marginTop: 10 }}>
+          <button className="btn" type="button" onClick={lerNomes} disabled={ocupado}>
+            {ocupado ? 'Lendo...' : 'Ler os nomes do cardápio e montar sozinho'}
+          </button>
+        </div>
       </div>
 
-      {categorias.map((cat) => (
-        <div className="cartao" key={cat.id}>
-          <h3>{cat.nome}</h3>
-          {cat.pratos.map((prato) => (
-            <div key={prato.id} className="bloco-estoque">
-              <LinhaEstoque
-                tipo="prato"
-                item={prato}
-                rascunhos={rascunhos}
-                setRascunhos={setRascunhos}
-                onSalvar={salvar}
+      <div className="cartao">
+        <h3>Itens em estoque</h3>
+        {itens.length === 0 && (
+          <p style={{ color: '#888', fontSize: '0.9rem' }}>
+            Nenhum item ainda. Use o botão acima para o sistema montar a partir do cardápio, ou adicione abaixo.
+          </p>
+        )}
+        {itens.map((item) => {
+          const q = item.id in rascunhos ? rascunhos[item.id] : item.quantidade === null ? '' : String(item.quantidade);
+          const alterado = item.id in rascunhos;
+          const estado =
+            item.quantidade === null ? 'sem' : item.quantidade === 0 ? 'zero' : item.quantidade <= ESTOQUE_BAIXO ? 'baixo' : 'ok';
+          const rotulo = { sem: 'Sem controle', zero: 'ESGOTADO', baixo: 'Acabando', ok: 'Em estoque' }[estado];
+          return (
+            <div className="linha-estoque" key={item.id}>
+              <div className="nome-estoque">
+                {item.nome} <span className={'selo-estoque ' + estado}>{rotulo}</span>
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="unidades"
+                value={q}
+                onChange={(e) => setRascunhos((atual) => ({ ...atual, [item.id]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') salvarQuantidade(item);
+                }}
               />
-              {prato.grupos.map((g) => (
-                <div key={g.id}>
-                  <div className="grupo-estoque">{g.nome}</div>
-                  {g.opcoes.map((o) => (
-                    <LinhaEstoque
-                      key={o.id}
-                      tipo="opcao"
-                      item={o}
-                      nivel={1}
-                      rascunhos={rascunhos}
-                      setRascunhos={setRascunhos}
-                      onSalvar={salvar}
-                    />
-                  ))}
-                </div>
-              ))}
+              <button className="btn" type="button" disabled={!alterado} onClick={() => salvarQuantidade(item)}>
+                Salvar
+              </button>
+              <input
+                type="number"
+                step="1"
+                className="input-un"
+                placeholder="+ entrada"
+                title="Chegou mercadoria? Digite quantas unidades entraram e clique em +"
+                value={entradas[item.id] ?? ''}
+                onChange={(e) => setEntradas((atual) => ({ ...atual, [item.id]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') darEntrada(item);
+                }}
+              />
+              <button className="btn-secundario" type="button" onClick={() => darEntrada(item)}>
+                +
+              </button>
+              <button className="btn-secundario" type="button" onClick={() => renomear(item)}>
+                Renomear
+              </button>
+              <button className="btn-perigo" type="button" onClick={() => excluirItem(item)}>
+                Excluir
+              </button>
             </div>
-          ))}
+          );
+        })}
+        <div className="linha-form" style={{ marginTop: 12 }}>
+          <input type="text" placeholder="Novo item (ex: Kibe de carne)" value={novoNome} onChange={(e) => setNovoNome(e.target.value)} />
+          <input
+            type="number"
+            min="0"
+            placeholder="Unidades"
+            value={novaQtd}
+            onChange={(e) => setNovaQtd(e.target.value)}
+            style={{ maxWidth: 120 }}
+          />
+          <button className="btn" type="button" onClick={criarItem}>
+            Adicionar item
+          </button>
         </div>
-      ))}
+      </div>
+
+      <div className="cartao">
+        <h3>O que cada prato e opção gasta</h3>
+        {cardapio.map((cat) => (
+          <div key={cat.id} style={{ marginBottom: 12 }}>
+            <div className="grupo-estoque" style={{ marginLeft: 0 }}>
+              {cat.nome}
+            </div>
+            {cat.pratos.map((prato) => (
+              <div key={prato.id} className="bloco-estoque">
+                {renderConsumo({ tipo: 'prato', id: prato.id, nome: prato.nome, consumo: prato.consumo })}
+                {prato.grupos.map((g) => (
+                  <div key={g.id}>
+                    <div className="grupo-estoque">{g.nome}</div>
+                    {g.opcoes.map((o) => (
+                      <Fragment key={o.id}>
+                        {renderConsumo({ tipo: 'opcao', id: o.id, nome: o.nome, consumo: o.consumo, filho: true })}
+                      </Fragment>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </>
   );
 }
@@ -1246,7 +1380,7 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
               nome: o.nome,
               descricao: o.descricao || '',
               precoAdicional: String(o.precoAdicional || ''),
-              estoque: o.estoque ?? null, // guardado só para não zerar o estoque ao salvar
+              id: o.id, // para a opção não perder o que consome do estoque ao salvar
             })),
           })),
         ),
@@ -1268,7 +1402,7 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
     );
   }
   function novaOpcao() {
-    return { nome: '', descricao: '', precoAdicional: '', estoque: null };
+    return { nome: '', descricao: '', precoAdicional: '' };
   }
 
   async function copiar() {
@@ -1284,7 +1418,6 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
             nome: o.nome,
             descricao: o.descricao || '',
             precoAdicional: String(o.precoAdicional || ''),
-            estoque: null, // o estoque não é copiado de outro prato
           })),
         })),
       );
@@ -1307,9 +1440,9 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
       const corpo = JSON.stringify({ grupos });
       await api('/pratos/' + prato.id + '/opcoes', { method: 'PUT', body: corpo });
       if (paraTodos) {
-        // os outros pratos recebem as opções sem copiar o estoque deste prato
+        // os outros pratos recebem as opções como novas (sem herdar o consumo de estoque deste prato)
         const semEstoque = JSON.stringify({
-          grupos: grupos.map((g) => ({ ...g, opcoes: g.opcoes.map((o) => ({ ...o, estoque: null })) })),
+          grupos: grupos.map((g) => ({ ...g, opcoes: g.opcoes.map((o) => ({ ...o, id: undefined })) })),
         });
         for (const p of outros) await api('/pratos/' + p.id + '/opcoes', { method: 'PUT', body: semEstoque });
       }

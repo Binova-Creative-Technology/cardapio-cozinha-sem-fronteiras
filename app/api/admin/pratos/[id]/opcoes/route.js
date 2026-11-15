@@ -37,11 +37,8 @@ export async function PUT(request, { params }) {
       .map((o) => ({
         nome: String(o?.nome || '').trim().slice(0, 80),
         descricao: String(o?.descricao || '').trim().slice(0, 200),
-        // estoque da opção é preservado ao regravar (null = sem controle)
-        estoque:
-          o?.estoque === null || o?.estoque === undefined || o?.estoque === ''
-            ? null
-            : Math.max(0, Math.floor(Number(o.estoque)) || 0),
+        // id que a opção tinha antes (para não perder o que ela consome do estoque ao regravar)
+        idAntigo: Number.isInteger(Number(o?.id)) && Number(o.id) > 0 ? Number(o.id) : null,
         precoAdicional: Number(String(o?.precoAdicional ?? 0).replace(',', '.')) || 0,
       }))
       .filter((o) => o.nome);
@@ -62,6 +59,15 @@ export async function PUT(request, { params }) {
   const { data: antigos, error: erroAntigos } = await db.from('csf_grupos_opcao').select('id').eq('prato_id', pratoId);
   if (erroAntigos) return Response.json({ erro: erroAntigos.message }, { status: 500 });
 
+  const idsAntigosGrupos = (antigos || []).map((a) => a.id);
+  let idsOpcoesAntigas = [];
+  if (idsAntigosGrupos.length) {
+    const { data: opcoesAntigas } = await db.from('csf_opcoes').select('id').in('grupo_id', idsAntigosGrupos);
+    idsOpcoesAntigas = (opcoesAntigas || []).map((o) => o.id);
+  }
+  const antigasSet = new Set(idsOpcoesAntigas);
+  const correspondencia = []; // [idAntigo, idNovo]
+
   // Cria os novos primeiro; só depois remove os antigos (se algo falhar, nada se perde).
   const criados = [];
   for (let gi = 0; gi < grupos.length; gi++) {
@@ -77,24 +83,46 @@ export async function PUT(request, { params }) {
     }
     criados.push(grupo.id);
 
-    const { error: erroOpcoes } = await db.from('csf_opcoes').insert(
-      g.opcoes.map((o, oi) => ({
-        grupo_id: grupo.id,
-        nome: o.nome,
-        descricao: o.descricao,
-        estoque: o.estoque,
-        preco_adicional: o.precoAdicional,
-        ordem: oi,
-      })),
-    );
+    const { data: novas, error: erroOpcoes } = await db
+      .from('csf_opcoes')
+      .insert(
+        g.opcoes.map((o, oi) => ({
+          grupo_id: grupo.id,
+          nome: o.nome,
+          descricao: o.descricao,
+          preco_adicional: o.precoAdicional,
+          ordem: oi,
+        })),
+      )
+      .select('id, ordem');
     if (erroOpcoes) {
       await db.from('csf_grupos_opcao').delete().in('id', criados);
       return Response.json({ erro: erroOpcoes.message }, { status: 500 });
     }
+    for (const n of novas || []) {
+      const antigo = g.opcoes[n.ordem]?.idAntigo;
+      if (antigo && antigasSet.has(antigo)) correspondencia.push([antigo, n.id]);
+    }
   }
 
-  const idsAntigos = (antigos || []).map((a) => a.id);
-  if (idsAntigos.length) await db.from('csf_grupos_opcao').delete().in('id', idsAntigos);
+  // A opção nova herda o que a antiga consumia do estoque
+  if (correspondencia.length) {
+    const { data: consumoAntigo } = await db
+      .from('csf_consumo')
+      .select('ref_id, item_id, unidades')
+      .eq('tipo', 'opcao')
+      .in('ref_id', correspondencia.map(([antigo]) => antigo));
+    const linhas = [];
+    for (const c of consumoAntigo || []) {
+      for (const [antigo, novo] of correspondencia) {
+        if (antigo === c.ref_id) linhas.push({ tipo: 'opcao', ref_id: novo, item_id: c.item_id, unidades: c.unidades });
+      }
+    }
+    if (linhas.length) await db.from('csf_consumo').insert(linhas);
+  }
+
+  if (idsAntigosGrupos.length) await db.from('csf_grupos_opcao').delete().in('id', idsAntigosGrupos);
+  if (idsOpcoesAntigas.length) await db.from('csf_consumo').delete().eq('tipo', 'opcao').in('ref_id', idsOpcoesAntigas);
 
   return Response.json({ ok: true });
 }

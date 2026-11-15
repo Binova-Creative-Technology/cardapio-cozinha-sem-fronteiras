@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { gruposDosPratos } from '@/lib/opcoes';
-import { unidadesPorPorcao } from '@/lib/estoque';
+import { disponibilidade } from '@/lib/estoque';
 
 export async function GET() {
   const db = supabaseAdmin();
@@ -14,33 +14,36 @@ export async function GET() {
 
   const { data: pratos, error: erroPratos } = await db
     .from('csf_pratos')
-    .select('id, categoria_id, nome, descricao, preco, foto, tempo_preparo, peso, quantidade, observacao, estoque, unidades_porcao')
+    .select('id, categoria_id, nome, descricao, preco, foto, tempo_preparo, peso, quantidade, observacao')
     .eq('ativo', true)
     .order('ordem')
     .order('id');
   if (erroPratos) return Response.json({ erro: erroPratos.message }, { status: 500 });
 
   let grupos;
+  let disp;
   try {
     grupos = await gruposDosPratos(pratos.map((p) => p.id));
+    const opcaoIds = Object.values(grupos).flatMap((gs) => gs.flatMap((g) => g.opcoes.map((o) => o.id)));
+    disp = await disponibilidade(pratos.map((p) => p.id), opcaoIds);
   } catch (err) {
     return Response.json({ erro: err.message }, { status: 500 });
   }
 
+  // "estoque" que o cliente recebe = quantas PORÇÕES ainda dá para pedir (null = sem controle)
   const resultado = categorias
     .map((cat) => ({
       id: cat.id,
       nome: cat.nome,
       pratos: pratos
         .filter((p) => p.categoria_id === cat.id)
-        .map(({ unidades_porcao, ...p }) => ({
+        .map((p) => ({
           ...p,
-          // O estoque do prato é em unidades; o cliente vê quantas PORÇÕES ainda dá para pedir.
-          estoque:
-            p.estoque === null || p.estoque === undefined
-              ? null
-              : Math.floor(p.estoque / unidadesPorPorcao({ quantidade: p.quantidade, unidades_porcao })),
-          grupos: grupos[p.id] || [],
+          estoque: disp.pratos.get(p.id) ?? null,
+          grupos: (grupos[p.id] || []).map((g) => ({
+            ...g,
+            opcoes: g.opcoes.map((o) => ({ ...o, estoque: disp.opcoes.get(o.id) ?? null })),
+          })),
         })),
     }))
     .filter((cat) => cat.pratos.length > 0);

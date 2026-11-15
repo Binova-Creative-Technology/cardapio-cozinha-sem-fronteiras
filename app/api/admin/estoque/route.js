@@ -1,38 +1,30 @@
 import { requireAuth } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { unidadesPorPorcao } from '@/lib/estoque';
 
-// Lista o estoque de todos os pratos e de cada opção. estoque = null significa "sem controle".
+// Estoque: itens (o que existe na cozinha) e o que cada prato/opção consome.
 export async function GET() {
   const naoAutenticado = await requireAuth();
   if (naoAutenticado) return naoAutenticado;
 
   const db = supabaseAdmin();
-  const { data: categorias, error: erroCat } = await db.from('csf_categorias').select('id, nome').order('ordem').order('id');
-  if (erroCat) return Response.json({ erro: erroCat.message }, { status: 500 });
+  const consultas = await Promise.all([
+    db.from('csf_estoque_itens').select('id, nome, quantidade').order('nome'),
+    db.from('csf_consumo').select('tipo, ref_id, item_id, unidades'),
+    db.from('csf_categorias').select('id, nome').order('ordem').order('id'),
+    db.from('csf_pratos').select('id, categoria_id, nome, ativo').order('ordem').order('id'),
+    db.from('csf_grupos_opcao').select('id, prato_id, nome').order('ordem').order('id'),
+    db.from('csf_opcoes').select('id, grupo_id, nome').order('ordem').order('id'),
+  ]);
+  const falha = consultas.find((c) => c.error);
+  if (falha) return Response.json({ erro: falha.error.message }, { status: 500 });
+  const [itens, consumo, categorias, pratos, grupos, opcoes] = consultas.map((c) => c.data);
 
-  const { data: pratos, error: erroPratos } = await db
-    .from('csf_pratos')
-    .select('id, categoria_id, nome, estoque, ativo, quantidade, unidades_porcao')
-    .order('ordem')
-    .order('id');
-  if (erroPratos) return Response.json({ erro: erroPratos.message }, { status: 500 });
+  const consumoDe = (tipo, id) =>
+    consumo
+      .filter((c) => c.tipo === tipo && c.ref_id === id)
+      .map((c) => ({ itemId: c.item_id, unidades: c.unidades }));
 
-  const { data: grupos, error: erroGrupos } = await db
-    .from('csf_grupos_opcao')
-    .select('id, prato_id, nome')
-    .order('ordem')
-    .order('id');
-  if (erroGrupos) return Response.json({ erro: erroGrupos.message }, { status: 500 });
-
-  const { data: opcoes, error: erroOpcoes } = await db
-    .from('csf_opcoes')
-    .select('id, grupo_id, nome, estoque')
-    .order('ordem')
-    .order('id');
-  if (erroOpcoes) return Response.json({ erro: erroOpcoes.message }, { status: 500 });
-
-  const resultado = categorias
+  const cardapio = categorias
     .map((cat) => ({
       id: cat.id,
       nome: cat.nome,
@@ -42,9 +34,7 @@ export async function GET() {
           id: p.id,
           nome: p.nome,
           ativo: p.ativo,
-          estoque: p.estoque,
-          unidadesPorcao: unidadesPorPorcao(p),
-          porcoes: p.estoque === null ? null : Math.floor(p.estoque / unidadesPorPorcao(p)),
+          consumo: consumoDe('prato', p.id),
           grupos: grupos
             .filter((g) => g.prato_id === p.id)
             .map((g) => ({
@@ -52,53 +42,90 @@ export async function GET() {
               nome: g.nome,
               opcoes: opcoes
                 .filter((o) => o.grupo_id === g.id)
-                .map((o) => ({ id: o.id, nome: o.nome, estoque: o.estoque })),
+                .map((o) => ({ id: o.id, nome: o.nome, consumo: consumoDe('opcao', o.id) })),
             })),
         })),
     }))
     .filter((cat) => cat.pratos.length > 0);
 
-  return Response.json(resultado);
+  return Response.json({ itens, cardapio });
 }
 
-// Define o estoque de um prato ou de uma opção.
-// Body: { tipo: 'prato' | 'opcao', id, estoque: número inteiro >= 0, ou null para "sem controle" }
+function lerQuantidade(valor) {
+  if (valor === '' || valor === null || valor === undefined) return { ok: true, valor: null };
+  const n = Number(valor);
+  if (!Number.isInteger(n) || n < 0 || n > 1000000) return { ok: false };
+  return { ok: true, valor: n };
+}
+
+// Cria um item de estoque. Body: { nome, quantidade (opcional; em branco = sem controle) }
+export async function POST(request) {
+  const naoAutenticado = await requireAuth();
+  if (naoAutenticado) return naoAutenticado;
+
+  const body = await request.json().catch(() => ({}));
+  const nome = String(body?.nome || '').trim().slice(0, 80);
+  if (!nome) return Response.json({ erro: 'Dê um nome ao item.' }, { status: 400 });
+  const q = lerQuantidade(body?.quantidade);
+  if (!q.ok) return Response.json({ erro: 'Quantidade inválida (número inteiro, 0 ou mais).' }, { status: 400 });
+
+  const { data, error } = await supabaseAdmin()
+    .from('csf_estoque_itens')
+    .insert({ nome, quantidade: q.valor })
+    .select('id')
+    .single();
+  if (error) return Response.json({ erro: error.message }, { status: 500 });
+  return Response.json({ id: data.id }, { status: 201 });
+}
+
+// Muda um item. Body: { id, nome?, quantidade? (define o total), somar? (entrada: soma ao que já tem) }
 export async function PATCH(request) {
   const naoAutenticado = await requireAuth();
   if (naoAutenticado) return naoAutenticado;
 
   const body = await request.json().catch(() => ({}));
-  const { tipo, id } = body || {};
-  let { estoque } = body || {};
+  const id = Number(body?.id);
+  if (!Number.isInteger(id)) return Response.json({ erro: 'Item inválido.' }, { status: 400 });
 
-  if (!['prato', 'opcao', 'unidades'].includes(tipo) || !Number.isInteger(Number(id))) {
-    return Response.json({ erro: 'Dados inválidos.' }, { status: 400 });
+  const db = supabaseAdmin();
+  const atualizacao = {};
+
+  if (body.nome !== undefined) {
+    const nome = String(body.nome).trim().slice(0, 80);
+    if (!nome) return Response.json({ erro: 'O nome não pode ficar vazio.' }, { status: 400 });
+    atualizacao.nome = nome;
   }
 
-  // Unidades que cada porção do prato consome (ex: salgado = 3)
-  if (tipo === 'unidades') {
-    const un = Number(body.unidades);
-    if (!Number.isInteger(un) || un < 1 || un > 1000) {
-      return Response.json({ erro: 'Unidades por porção: número inteiro de 1 a 1000.' }, { status: 400 });
+  if (body.somar !== undefined) {
+    const soma = Number(body.somar);
+    if (!Number.isInteger(soma) || soma === 0 || Math.abs(soma) > 1000000) {
+      return Response.json({ erro: 'Informe um número inteiro para somar.' }, { status: 400 });
     }
-    const { error } = await supabaseAdmin().from('csf_pratos').update({ unidades_porcao: un }).eq('id', Number(id));
-    if (error) return Response.json({ erro: error.message }, { status: 500 });
-    return Response.json({ ok: true });
-  }
-  if (estoque === '' || estoque === null || estoque === undefined) {
-    estoque = null;
-  } else {
-    estoque = Number(estoque);
-    if (!Number.isInteger(estoque) || estoque < 0 || estoque > 100000) {
-      return Response.json({ erro: 'Informe um número inteiro de 0 a 100000.' }, { status: 400 });
-    }
+    const { data: atual } = await db.from('csf_estoque_itens').select('quantidade').eq('id', id).maybeSingle();
+    if (!atual) return Response.json({ erro: 'Item não encontrado.' }, { status: 404 });
+    atualizacao.quantidade = Math.max(0, (atual.quantidade ?? 0) + soma);
+  } else if (body.quantidade !== undefined) {
+    const q = lerQuantidade(body.quantidade);
+    if (!q.ok) return Response.json({ erro: 'Quantidade inválida (número inteiro, 0 ou mais).' }, { status: 400 });
+    atualizacao.quantidade = q.valor;
   }
 
-  const { error } = await supabaseAdmin()
-    .from(tipo === 'prato' ? 'csf_pratos' : 'csf_opcoes')
-    .update({ estoque })
-    .eq('id', Number(id));
+  if (Object.keys(atualizacao).length === 0) return Response.json({ erro: 'Nada para alterar.' }, { status: 400 });
+
+  const { error } = await db.from('csf_estoque_itens').update(atualizacao).eq('id', id);
   if (error) return Response.json({ erro: error.message }, { status: 500 });
+  return Response.json({ ok: true });
+}
 
+// Exclui um item de estoque (e o consumo ligado a ele). ?id=
+export async function DELETE(request) {
+  const naoAutenticado = await requireAuth();
+  if (naoAutenticado) return naoAutenticado;
+
+  const id = Number(new URL(request.url).searchParams.get('id'));
+  if (!Number.isInteger(id)) return Response.json({ erro: 'Item inválido.' }, { status: 400 });
+
+  const { error } = await supabaseAdmin().from('csf_estoque_itens').delete().eq('id', id);
+  if (error) return Response.json({ erro: error.message }, { status: 500 });
   return Response.json({ ok: true });
 }

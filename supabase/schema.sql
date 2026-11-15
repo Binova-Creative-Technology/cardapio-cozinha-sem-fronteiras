@@ -238,6 +238,77 @@ grant execute on function csf_baixar_estoque(text, bigint, integer, boolean) to 
 grant execute on function csf_devolver_estoque(text, bigint, integer) to service_role;
 
 -- ---------------------------------------------------------------------------
+-- ESTOQUE POR ITEM (é este que o sistema usa; as colunas "estoque" de pratos/opções
+-- e as funções csf_*_estoque acima ficaram sem uso).
+--
+-- csf_estoque_itens: o que existe na cozinha, em unidades (ex: "Kibe de carne": 120).
+--   quantidade NULL = ainda sem controle.
+-- csf_consumo: o que cada prato/opção gasta POR PORÇÃO pedida
+--   (ex: opção "3 kibe de carne" = 3 un. de "Kibe de carne").
+-- csf_itens_pedido.baixas: o que cada item do pedido tirou do estoque
+--   (para devolver exatamente ao cancelar/excluir).
+-- ---------------------------------------------------------------------------
+create table if not exists csf_estoque_itens (
+  id bigint generated always as identity primary key,
+  nome text not null,
+  quantidade integer,
+  criado_em timestamptz not null default now()
+);
+
+create table if not exists csf_consumo (
+  id bigint generated always as identity primary key,
+  tipo text not null,
+  ref_id bigint not null,
+  item_id bigint not null references csf_estoque_itens(id) on delete cascade,
+  unidades integer not null default 1,
+  unique (tipo, ref_id, item_id)
+);
+
+alter table csf_estoque_itens enable row level security;
+alter table csf_consumo enable row level security;
+create index if not exists idx_csf_consumo_ref on csf_consumo (tipo, ref_id);
+
+alter table csf_itens_pedido add column if not exists baixas jsonb;
+
+-- Baixa atômica. Retorna: -1 = item sem controle, -2 = estoque insuficiente,
+-- >= 0 = quanto sobrou. p_forcar = true nunca recusa (para no zero).
+create or replace function csf_baixar_item(p_item bigint, p_qtd integer, p_forcar boolean default false)
+returns integer
+language plpgsql
+set search_path = public
+as $$
+declare
+  novo integer;
+begin
+  if p_forcar then
+    update csf_estoque_itens set quantidade = greatest(0, quantidade - p_qtd) where id = p_item and quantidade is not null returning quantidade into novo;
+  else
+    update csf_estoque_itens set quantidade = quantidade - p_qtd where id = p_item and quantidade is not null and quantidade >= p_qtd returning quantidade into novo;
+  end if;
+  if found then return novo; end if;
+  if exists (select 1 from csf_estoque_itens where id = p_item and quantidade is null) or not exists (select 1 from csf_estoque_itens where id = p_item) then
+    return -1;
+  end if;
+  return -2;
+end;
+$$;
+
+create or replace function csf_devolver_item(p_item bigint, p_qtd integer)
+returns void
+language plpgsql
+set search_path = public
+as $$
+begin
+  update csf_estoque_itens set quantidade = quantidade + p_qtd where id = p_item and quantidade is not null;
+end;
+$$;
+
+revoke execute on function csf_baixar_item(bigint, integer, boolean) from public, anon, authenticated;
+revoke execute on function csf_devolver_item(bigint, integer) from public, anon, authenticated;
+grant execute on function csf_baixar_item(bigint, integer, boolean) to service_role;
+grant execute on function csf_devolver_item(bigint, integer) to service_role;
+
+-- ---------------------------------------------------------------------------
 -- Storage (fotos dos pratos e logo do restaurante)
 --
 -- Cria o bucket "csf-uploads" (nome específico deste projeto, para não
