@@ -569,6 +569,8 @@ function AbaPedidos({
               const aberto = expandidoId === p.id;
               const totalItens = p.itens.reduce((soma, i) => soma + i.quantidade, 0);
               const fechado = p.status !== 'cancelado' && contaFechada(p);
+              // pedido novo pisca até a equipe mudar o status; se a conta já foi fechada, não pisca
+              const piscando = p.status === 'recebido' && !fechado;
               return (
                 <Fragment key={p.id}>
                   {novoDia && (
@@ -587,12 +589,12 @@ function AbaPedidos({
                     </tr>
                   )}
                   <tr
-                    className={p.status === 'recebido' ? 'pedido-novo' : undefined}
+                    className={piscando ? 'pedido-novo' : undefined}
                     onClick={() => setExpandidoId(aberto ? null : p.id)}
-                    style={{ cursor: 'pointer', background: aberto && p.status !== 'recebido' ? '#faf7f2' : undefined }}
+                    style={{ cursor: 'pointer', background: aberto && !piscando ? '#faf7f2' : undefined }}
                   >
                     <td>
-                      {p.status === 'recebido' && <span className="selo-novo">NOVO</span>}
+                      {piscando && <span className="selo-novo">NOVO</span>}
                       {hora}
                     </td>
                     <td>{p.mesa || '-'}</td>
