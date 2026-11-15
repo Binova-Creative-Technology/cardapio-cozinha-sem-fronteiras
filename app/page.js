@@ -549,7 +549,10 @@ function ModalOpcoes({ prato, onFechar, onAdicionar }) {
                     checked={marcada}
                     onChange={() => marcar(g, o)}
                   />
-                  <span className="opcao-nome">{o.nome}</span>
+                  <span className="opcao-nome">
+                    {o.nome}
+                    {o.descricao && <small className="opcao-descricao">{o.descricao}</small>}
+                  </span>
                   {o.precoAdicional > 0 && <span className="opcao-preco">+ {formatarMoeda(o.precoAdicional)}</span>}
                 </label>
               );

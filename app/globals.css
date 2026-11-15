@@ -236,6 +236,7 @@ header.topo .abas-cardapio button.ativa {
 .modal .opcao-linha.marcada { border-color: #a3352b; background: #fbf1ef; }
 .modal .opcao-linha input { width: auto; margin: 0; flex: none; }
 .modal .opcao-linha .opcao-nome { flex: 1; }
+.modal .opcao-linha .opcao-descricao { display: block; color: #777; font-size: 0.8rem; font-weight: 400; margin-top: 2px; }
 .modal .opcao-linha .opcao-preco { color: #a3352b; font-weight: 600; white-space: nowrap; }
 .btn-escolher {
   padding: 8px 14px; border-radius: 8px; border: none;

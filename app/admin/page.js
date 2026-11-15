@@ -1084,7 +1084,11 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
           lista.map((g) => ({
             nome: g.nome,
             tipo: g.tipo,
-            opcoes: g.opcoes.map((o) => ({ nome: o.nome, precoAdicional: String(o.precoAdicional || '') })),
+            opcoes: g.opcoes.map((o) => ({
+              nome: o.nome,
+              descricao: o.descricao || '',
+              precoAdicional: String(o.precoAdicional || ''),
+            })),
           })),
         ),
       )
@@ -1105,7 +1109,7 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
     );
   }
   function novaOpcao() {
-    return { nome: '', precoAdicional: '' };
+    return { nome: '', descricao: '', precoAdicional: '' };
   }
 
   async function copiar() {
@@ -1117,7 +1121,11 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
         lista.map((g) => ({
           nome: g.nome,
           tipo: g.tipo,
-          opcoes: g.opcoes.map((o) => ({ nome: o.nome, precoAdicional: String(o.precoAdicional || '') })),
+          opcoes: g.opcoes.map((o) => ({
+            nome: o.nome,
+            descricao: o.descricao || '',
+            precoAdicional: String(o.precoAdicional || ''),
+          })),
         })),
       );
     } catch (err) {
@@ -1183,31 +1191,39 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
             </button>
           </div>
           {g.opcoes.map((o, oi) => (
-            <div className="linha-form" key={oi} style={{ marginBottom: 4 }}>
+            <div key={oi} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px dashed #e5ddd0' }}>
+              <div className="linha-form" style={{ marginBottom: 4 }}>
+                <input
+                  type="text"
+                  placeholder="Opção (ex: Arroz branco)"
+                  value={o.nome}
+                  onChange={(e) => mudarOpcao(gi, oi, { nome: e.target.value })}
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder={g.tipo === 'extra' ? 'Valor a mais (R$)' : 'Valor a mais (opcional)'}
+                  value={o.precoAdicional}
+                  onChange={(e) => mudarOpcao(gi, oi, { precoAdicional: e.target.value })}
+                  style={{ maxWidth: 160 }}
+                />
+                <button
+                  className="btn-secundario"
+                  type="button"
+                  onClick={() => mudarGrupo(gi, { opcoes: g.opcoes.filter((_, j) => j !== oi) })}
+                >
+                  ✕
+                </button>
+              </div>
               <input
                 type="text"
-                placeholder="Opção (ex: Arroz branco)"
-                value={o.nome}
-                onChange={(e) => mudarOpcao(gi, oi, { nome: e.target.value })}
+                placeholder="Descrição da opção (opcional — o cliente vê ao escolher)"
+                maxLength={200}
+                value={o.descricao || ''}
+                onChange={(e) => mudarOpcao(gi, oi, { descricao: e.target.value })}
+                style={{ width: '100%' }}
               />
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder={g.tipo === 'extra' ? 'Valor a mais (R$)' : 'Valor a mais (opcional)'}
-                value={o.precoAdicional}
-                onChange={(e) => mudarOpcao(gi, oi, { precoAdicional: e.target.value })}
-                style={{ maxWidth: 160 }}
-              />
-              <button
-                className="btn-secundario"
-                type="button"
-                onClick={() =>
-                  mudarGrupo(gi, { opcoes: g.opcoes.filter((_, j) => j !== oi) })
-                }
-              >
-                ✕
-              </button>
             </div>
           ))}
           <button

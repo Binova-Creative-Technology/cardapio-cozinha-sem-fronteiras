@@ -85,6 +85,9 @@ create table if not exists csf_opcoes (
   ordem integer not null default 0
 );
 
+-- Descrição opcional de cada opção (aparece para o cliente ao escolher)
+alter table csf_opcoes add column if not exists descricao text default '';
+
 -- Texto com o que o cliente escolheu em cada item do pedido
 alter table csf_itens_pedido add column if not exists opcoes text default '';
 -- Observação do cliente para aquele prato (ex: "sem cebola")

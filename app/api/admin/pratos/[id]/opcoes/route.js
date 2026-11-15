@@ -36,6 +36,7 @@ export async function PUT(request, { params }) {
     const opcoes = (Array.isArray(g?.opcoes) ? g.opcoes : [])
       .map((o) => ({
         nome: String(o?.nome || '').trim().slice(0, 80),
+        descricao: String(o?.descricao || '').trim().slice(0, 200),
         precoAdicional: Number(String(o?.precoAdicional ?? 0).replace(',', '.')) || 0,
       }))
       .filter((o) => o.nome);
@@ -72,7 +73,13 @@ export async function PUT(request, { params }) {
     criados.push(grupo.id);
 
     const { error: erroOpcoes } = await db.from('csf_opcoes').insert(
-      g.opcoes.map((o, oi) => ({ grupo_id: grupo.id, nome: o.nome, preco_adicional: o.precoAdicional, ordem: oi })),
+      g.opcoes.map((o, oi) => ({
+        grupo_id: grupo.id,
+        nome: o.nome,
+        descricao: o.descricao,
+        preco_adicional: o.precoAdicional,
+        ordem: oi,
+      })),
     );
     if (erroOpcoes) {
       await db.from('csf_grupos_opcao').delete().in('id', criados);
