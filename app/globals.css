@@ -139,6 +139,12 @@ header.topo .abas-cardapio button.ativa {
 }
 .prato-info .aviso-prato { font-size: 0.8rem; color: #7a5a12; background: #fff4d6; border-radius: 6px; padding: 3px 8px; margin-top: 4px; display: inline-block; }
 .modal-foto .aviso-grande { margin: 10px 16px 0; font-size: 0.9rem; }
+.prato-info .selo-esgotado { display: inline-block; margin-top: 4px; padding: 2px 10px; border-radius: 999px; background: #fde1df; color: #b71c1c; font-size: 0.78rem; font-weight: 800; text-transform: uppercase; }
+.prato-info .selo-restam { display: inline-block; margin-top: 4px; padding: 2px 10px; border-radius: 999px; background: #fff0cc; color: #8a5a00; font-size: 0.78rem; font-weight: 700; }
+.indisponivel { color: #b71c1c; font-weight: 700; font-size: 0.85rem; text-align: center; }
+.qtd-controle button:disabled { opacity: 0.35; cursor: not-allowed; }
+.modal .opcao-linha.esgotada { opacity: 0.5; cursor: not-allowed; background: #f5f5f5; }
+.modal .opcao-linha.esgotada .opcao-preco { color: #b71c1c; }
 .prato-foto-clicavel { cursor: zoom-in; }
 .modal.modal-foto { padding: 0 0 16px; overflow-x: hidden; }
 .modal-foto .foto-grande { width: 100%; max-height: 55vh; object-fit: cover; display: block; border-radius: 12px 12px 0 0; }
@@ -429,6 +435,21 @@ table th { color: #666; font-weight: 600; }
 button.btn { background: #a3352b; color: #fff; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; }
 button.btn-secundario { background: #eee; color: #333; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; }
 button.btn-perigo { background: #fdecea; color: #a3352b; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+
+/* Aba Estoque */
+.bloco-estoque { border-bottom: 1px solid #eee; padding: 8px 0; }
+.bloco-estoque:last-child { border-bottom: none; }
+.linha-estoque { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0; }
+.linha-estoque .nome-estoque { flex: 1; min-width: 150px; font-weight: 600; }
+.linha-estoque.filha { padding-left: 18px; }
+.linha-estoque.filha .nome-estoque { font-weight: 400; }
+.linha-estoque input { width: 120px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }
+.grupo-estoque { margin: 6px 0 0 18px; font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: 0.03em; }
+.selo-estoque { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; margin-left: 6px; }
+.selo-estoque.sem { background: #eee; color: #777; }
+.selo-estoque.ok { background: #e3f4e6; color: #1a7a3d; }
+.selo-estoque.baixo { background: #fff0cc; color: #8a5a00; }
+.selo-estoque.zero { background: #fde1df; color: #b71c1c; }
 
 /* Cabeçalho de cada dia na lista de pedidos */
 tr.linha-dia td {

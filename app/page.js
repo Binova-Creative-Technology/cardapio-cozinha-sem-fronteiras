@@ -171,7 +171,14 @@ function PaginaCliente() {
       // prefixo "p": chaves só com números fariam o JavaScript reordenar o carrinho pelo id
       const chave = `p${prato.id}`;
       const item = atual[chave] || { chave, prato, opcoes: [], precoUnit: Number(prato.preco), quantidade: 0 };
-      return { ...atual, [chave]: { ...item, quantidade: Math.max(0, item.quantidade + delta) } };
+      let quantidade = Math.max(0, item.quantidade + delta);
+      if (delta > 0 && prato.estoque !== null && prato.estoque !== undefined) {
+        const outras = Object.values(atual)
+          .filter((i) => i.prato.id === prato.id && i.chave !== chave)
+          .reduce((soma, i) => soma + i.quantidade, 0);
+        quantidade = Math.min(quantidade, Math.max(0, prato.estoque - outras));
+      }
+      return { ...atual, [chave]: { ...item, quantidade } };
     });
   }
 
@@ -191,6 +198,23 @@ function PaginaCliente() {
 
   const itensCarrinho = Object.values(carrinho).filter((i) => i.quantidade > 0);
   const totalCarrinho = itensCarrinho.reduce((acc, i) => acc + i.precoUnit * i.quantidade, 0);
+  // Quantas unidades ainda dá para pedir deste prato com estas opções (considera o que já está no carrinho)
+  const limiteQuantidade = (prato, opcoesIds) => {
+    let limite = 99;
+    if (prato.estoque !== null && prato.estoque !== undefined) {
+      limite = Math.min(limite, prato.estoque - quantidadeDoPrato(prato.id));
+    }
+    for (const g of prato.grupos || []) {
+      for (const o of g.opcoes) {
+        if (!opcoesIds.includes(o.id) || o.estoque === null || o.estoque === undefined) continue;
+        const usado = itensCarrinho
+          .filter((i) => i.opcoes.some((x) => x.id === o.id))
+          .reduce((soma, i) => soma + i.quantidade, 0);
+        limite = Math.min(limite, o.estoque - usado);
+      }
+    }
+    return Math.max(0, limite);
+  };
   const quantidadeDoPrato = (pratoId) =>
     itensCarrinho.filter((i) => i.prato.id === pratoId).reduce((soma, i) => soma + i.quantidade, 0);
 
@@ -386,12 +410,19 @@ function PaginaCliente() {
                         {prato.descricao && <div className="descricao">{prato.descricao}</div>}
                         {prato.observacao && <div className="aviso-prato">⚠ {prato.observacao}</div>}
                         <div className="preco">{formatarMoeda(prato.preco)}</div>
+                        {pratoEsgotado(prato) ? (
+                          <div className="selo-esgotado">Esgotado</div>
+                        ) : prato.estoque > 0 && prato.estoque <= 5 ? (
+                          <div className="selo-restam">Restam {prato.estoque}</div>
+                        ) : null}
                         {prato.peso || prato.quantidade ? (
                           <div className="tempo-preparo">{[prato.peso && `⚖ ${prato.peso}`, prato.quantidade && `🍽 ${prato.quantidade}`].filter(Boolean).join(' · ')}</div>
                         ) : null}
                         {prato.tempo_preparo ? <div className="tempo-preparo">⏱ {prato.tempo_preparo} min</div> : null}
                       </div>
-                      {prato.grupos && prato.grupos.length > 0 ? (
+                      {pratoEsgotado(prato) ? (
+                        <div className="indisponivel">Indisponível</div>
+                      ) : prato.grupos && prato.grupos.length > 0 ? (
                         <div style={{ textAlign: 'center' }}>
                           <button className="btn-escolher" type="button" onClick={() => setPratoEscolhendo(prato)}>
                             Escolher
@@ -408,7 +439,12 @@ function PaginaCliente() {
                             −
                           </button>
                           <span>{carrinho[`p${prato.id}`]?.quantidade || 0}</span>
-                          <button type="button" aria-label="Aumentar" onClick={() => alterarQuantidade(prato, 1)}>
+                          <button
+                            type="button"
+                            aria-label="Aumentar"
+                            disabled={limiteQuantidade(prato, []) <= 0}
+                            onClick={() => alterarQuantidade(prato, 1)}
+                          >
                             +
                           </button>
                         </div>
@@ -457,6 +493,7 @@ function PaginaCliente() {
                   <button
                     className="btn-confirmar"
                     type="button"
+                    disabled={pratoEsgotado(pratoVendo)}
                     onClick={() => {
                       const prato = pratoVendo;
                       setPratoVendo(null);
@@ -474,6 +511,7 @@ function PaginaCliente() {
           {pratoEscolhendo && (
             <ModalOpcoes
               prato={pratoEscolhendo}
+              limiteQuantidade={limiteQuantidade}
               onFechar={() => setPratoEscolhendo(null)}
               onAdicionar={adicionarComOpcoes}
             />
@@ -502,7 +540,13 @@ function PaginaCliente() {
   );
 }
 
-function ModalOpcoes({ prato, onFechar, onAdicionar }) {
+// Prato sem estoque, ou com um grupo obrigatório em que todas as opções acabaram
+function pratoEsgotado(prato) {
+  if (prato.estoque === 0) return true;
+  return (prato.grupos || []).some((g) => g.tipo === 'unica' && g.opcoes.length > 0 && g.opcoes.every((o) => o.estoque === 0));
+}
+
+function ModalOpcoes({ prato, onFechar, onAdicionar, limiteQuantidade }) {
   const [escolhas, setEscolhas] = useState({}); // { [grupoId]: [opcaoId, ...] }
   const [quantidade, setQuantidade] = useState(1);
   const [erro, setErro] = useState('');
@@ -521,11 +565,16 @@ function ModalOpcoes({ prato, onFechar, onAdicionar }) {
 
   const selecionadas = prato.grupos.flatMap((g) => g.opcoes.filter((o) => (escolhas[g.id] || []).includes(o.id)).map((o) => ({ ...o, grupo: g.nome })));
   const precoUnit = Number(prato.preco) + selecionadas.reduce((soma, o) => soma + o.precoAdicional, 0);
+  const limite = limiteQuantidade(prato, selecionadas.map((o) => o.id));
 
   function confirmar() {
     const faltando = prato.grupos.find((g) => g.tipo === 'unica' && !(escolhas[g.id] || []).length);
     if (faltando) {
       setErro(`Escolha uma opção de "${faltando.nome}".`);
+      return;
+    }
+    if (quantidade > limite) {
+      setErro(limite > 0 ? `Só temos ${limite} disponível com essa escolha.` : 'Essa escolha acabou. Tente outra opção.');
       return;
     }
     onAdicionar(prato, selecionadas, quantidade);
@@ -541,19 +590,25 @@ function ModalOpcoes({ prato, onFechar, onAdicionar }) {
             <div className="dica">{g.tipo === 'unica' ? 'Escolha 1 (obrigatório)' : 'Opcional — marque quantos quiser (valor à parte)'}</div>
             {g.opcoes.map((o) => {
               const marcada = (escolhas[g.id] || []).includes(o.id);
+              const acabou = o.estoque === 0;
               return (
-                <label className={'opcao-linha' + (marcada ? ' marcada' : '')} key={o.id}>
+                <label className={'opcao-linha' + (marcada ? ' marcada' : '') + (acabou ? ' esgotada' : '')} key={o.id}>
                   <input
                     type={g.tipo === 'unica' ? 'radio' : 'checkbox'}
                     name={'grupo-' + g.id}
                     checked={marcada}
+                    disabled={acabou}
                     onChange={() => marcar(g, o)}
                   />
                   <span className="opcao-nome">
                     {o.nome}
                     {o.descricao && <small className="opcao-descricao">{o.descricao}</small>}
                   </span>
-                  {o.precoAdicional > 0 && <span className="opcao-preco">+ {formatarMoeda(o.precoAdicional)}</span>}
+                  {acabou ? (
+                    <span className="opcao-preco">Esgotado</span>
+                  ) : (
+                    o.precoAdicional > 0 && <span className="opcao-preco">+ {formatarMoeda(o.precoAdicional)}</span>
+                  )}
                 </label>
               );
             })}
@@ -566,7 +621,12 @@ function ModalOpcoes({ prato, onFechar, onAdicionar }) {
               −
             </button>
             <span>{quantidade}</span>
-            <button type="button" aria-label="Aumentar" onClick={() => setQuantidade((q) => Math.min(99, q + 1))}>
+            <button
+              type="button"
+              aria-label="Aumentar"
+              disabled={quantidade >= limite}
+              onClick={() => setQuantidade((q) => Math.min(limite, q + 1))}
+            >
               +
             </button>
           </div>

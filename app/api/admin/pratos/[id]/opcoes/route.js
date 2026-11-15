@@ -37,6 +37,11 @@ export async function PUT(request, { params }) {
       .map((o) => ({
         nome: String(o?.nome || '').trim().slice(0, 80),
         descricao: String(o?.descricao || '').trim().slice(0, 200),
+        // estoque da opção é preservado ao regravar (null = sem controle)
+        estoque:
+          o?.estoque === null || o?.estoque === undefined || o?.estoque === ''
+            ? null
+            : Math.max(0, Math.floor(Number(o.estoque)) || 0),
         precoAdicional: Number(String(o?.precoAdicional ?? 0).replace(',', '.')) || 0,
       }))
       .filter((o) => o.nome);
@@ -77,6 +82,7 @@ export async function PUT(request, { params }) {
         grupo_id: grupo.id,
         nome: o.nome,
         descricao: o.descricao,
+        estoque: o.estoque,
         preco_adicional: o.precoAdicional,
         ordem: oi,
       })),

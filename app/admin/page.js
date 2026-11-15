@@ -301,6 +301,7 @@ function Painel({ config, onLogout, onConfigAtualizado }) {
           ['pedidos', 'Pedidos'],
           ['relatorio', 'Relatório'],
           ['cardapio', 'Cardápio'],
+          ['estoque', 'Estoque'],
           ['qrcodes', 'QR Codes'],
           ['config', 'Configurações'],
         ].map(([id, rotulo]) => (
@@ -323,6 +324,7 @@ function Painel({ config, onLogout, onConfigAtualizado }) {
         )}
         {aba === 'relatorio' && <AbaRelatorio gatilhoAtualizacao={gatilhoAtualizacao} />}
         {aba === 'cardapio' && <AbaCardapio />}
+        {aba === 'estoque' && <AbaEstoque gatilhoAtualizacao={gatilhoAtualizacao} />}
         {aba === 'qrcodes' && <AbaQrCodes />}
         {aba === 'config' && <AbaConfig config={config} onConfigAtualizado={onConfigAtualizado} />}
       </main>
@@ -817,6 +819,123 @@ function AbaRelatorio({ gatilhoAtualizacao }) {
   );
 }
 
+const ESTOQUE_BAIXO = 5;
+
+function SeloEstoque({ estoque }) {
+  if (estoque === null || estoque === undefined) return <span className="selo-estoque sem">Sem controle</span>;
+  if (estoque === 0) return <span className="selo-estoque zero">ESGOTADO</span>;
+  if (estoque <= ESTOQUE_BAIXO) return <span className="selo-estoque baixo">Acabando</span>;
+  return <span className="selo-estoque ok">Em estoque</span>;
+}
+
+function LinhaEstoque({ tipo, item, nivel, rascunhos, setRascunhos, onSalvar }) {
+  const chave = `${tipo}-${item.id}`;
+  const valorTela = chave in rascunhos ? rascunhos[chave] : item.estoque === null ? '' : String(item.estoque);
+  const alterado = chave in rascunhos;
+
+  return (
+    <div className={'linha-estoque' + (nivel ? ' filha' : '')}>
+      <div className="nome-estoque">
+        {item.nome}
+        {item.ativo === false && <span className="selo-estoque sem">Desativado</span>}
+      </div>
+      <SeloEstoque estoque={item.estoque} />
+      <input
+        type="number"
+        min="0"
+        step="1"
+        placeholder="sem controle"
+        value={valorTela}
+        onChange={(e) => setRascunhos((atual) => ({ ...atual, [chave]: e.target.value }))}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onSalvar(tipo, item.id, valorTela, chave);
+        }}
+      />
+      <button className="btn" type="button" disabled={!alterado} onClick={() => onSalvar(tipo, item.id, valorTela, chave)}>
+        Salvar
+      </button>
+    </div>
+  );
+}
+
+function AbaEstoque({ gatilhoAtualizacao }) {
+  const [categorias, setCategorias] = useState(null);
+  const [rascunhos, setRascunhos] = useState({});
+
+  const carregar = useCallback(() => {
+    api('/estoque')
+      .then(setCategorias)
+      .catch((err) => alert(err.message));
+  }, []);
+
+  useEffect(() => {
+    carregar();
+  }, [carregar, gatilhoAtualizacao]);
+
+  async function salvar(tipo, id, valor, chave) {
+    try {
+      await api('/estoque', { method: 'PATCH', body: JSON.stringify({ tipo, id, estoque: valor === '' ? null : valor }) });
+      setRascunhos((atual) => {
+        const { [chave]: _descartado, ...resto } = atual;
+        return resto;
+      });
+      carregar();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  if (!categorias) return <div className="vazio">Carregando estoque...</div>;
+  if (categorias.length === 0) return <div className="vazio">Cadastre pratos no Cardápio primeiro.</div>;
+
+  return (
+    <>
+      <div className="cartao">
+        <h3>Como funciona o estoque</h3>
+        <p style={{ margin: 0, fontSize: '0.9rem', color: '#555', lineHeight: 1.45 }}>
+          Digite quantas unidades você tem e clique em <b>Salvar</b>. A cada pedido, o sistema <b>desconta sozinho</b>:
+          1 do prato e 1 de cada opção escolhida (arroz, proteína...), por unidade. Quando chega a <b>0</b>, o item
+          aparece como <b>Esgotado</b> para o cliente e ninguém consegue pedir. Pedido <b>cancelado ou excluído devolve</b> as
+          unidades. <b>Deixe em branco</b> para não controlar aquele item.
+        </p>
+      </div>
+
+      {categorias.map((cat) => (
+        <div className="cartao" key={cat.id}>
+          <h3>{cat.nome}</h3>
+          {cat.pratos.map((prato) => (
+            <div key={prato.id} className="bloco-estoque">
+              <LinhaEstoque
+                tipo="prato"
+                item={prato}
+                rascunhos={rascunhos}
+                setRascunhos={setRascunhos}
+                onSalvar={salvar}
+              />
+              {prato.grupos.map((g) => (
+                <div key={g.id}>
+                  <div className="grupo-estoque">{g.nome}</div>
+                  {g.opcoes.map((o) => (
+                    <LinhaEstoque
+                      key={o.id}
+                      tipo="opcao"
+                      item={o}
+                      nivel={1}
+                      rascunhos={rascunhos}
+                      setRascunhos={setRascunhos}
+                      onSalvar={salvar}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+    </>
+  );
+}
+
 function AbaCardapio() {
   const [categorias, setCategorias] = useState([]);
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
@@ -1088,6 +1207,7 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
               nome: o.nome,
               descricao: o.descricao || '',
               precoAdicional: String(o.precoAdicional || ''),
+              estoque: o.estoque ?? null, // guardado só para não zerar o estoque ao salvar
             })),
           })),
         ),
@@ -1109,7 +1229,7 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
     );
   }
   function novaOpcao() {
-    return { nome: '', descricao: '', precoAdicional: '' };
+    return { nome: '', descricao: '', precoAdicional: '', estoque: null };
   }
 
   async function copiar() {
@@ -1125,6 +1245,7 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
             nome: o.nome,
             descricao: o.descricao || '',
             precoAdicional: String(o.precoAdicional || ''),
+            estoque: null, // o estoque não é copiado de outro prato
           })),
         })),
       );
@@ -1147,7 +1268,11 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
       const corpo = JSON.stringify({ grupos });
       await api('/pratos/' + prato.id + '/opcoes', { method: 'PUT', body: corpo });
       if (paraTodos) {
-        for (const p of outros) await api('/pratos/' + p.id + '/opcoes', { method: 'PUT', body: corpo });
+        // os outros pratos recebem as opções sem copiar o estoque deste prato
+        const semEstoque = JSON.stringify({
+          grupos: grupos.map((g) => ({ ...g, opcoes: g.opcoes.map((o) => ({ ...o, estoque: null })) })),
+        });
+        for (const p of outros) await api('/pratos/' + p.id + '/opcoes', { method: 'PUT', body: semEstoque });
       }
       onFechar(paraTodos ? 'todos' : true);
     } catch (err) {

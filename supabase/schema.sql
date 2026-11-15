@@ -172,6 +172,66 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- Estoque: NULL = sem controle; 0 = esgotado; N = quantidade disponível
+-- (cada pedido desconta sozinho; cancelar/excluir o pedido devolve)
+-- ---------------------------------------------------------------------------
+alter table csf_pratos add column if not exists estoque integer;
+alter table csf_opcoes add column if not exists estoque integer;
+alter table csf_itens_pedido add column if not exists opcoes_ids text default '';
+
+-- Baixa atômica. Retorna: -1 = sem controle de estoque, -2 = estoque insuficiente,
+-- >= 0 = estoque restante. Com p_forcar = true nunca recusa (para no zero).
+create or replace function csf_baixar_estoque(p_tipo text, p_id bigint, p_qtd integer, p_forcar boolean default false)
+returns integer
+language plpgsql
+set search_path = public
+as $$
+declare
+  novo integer;
+begin
+  if p_tipo = 'prato' then
+    if p_forcar then
+      update csf_pratos set estoque = greatest(0, estoque - p_qtd) where id = p_id and estoque is not null returning estoque into novo;
+    else
+      update csf_pratos set estoque = estoque - p_qtd where id = p_id and estoque is not null and estoque >= p_qtd returning estoque into novo;
+    end if;
+    if found then return novo; end if;
+    if exists (select 1 from csf_pratos where id = p_id and estoque is null) or not exists (select 1 from csf_pratos where id = p_id) then return -1; end if;
+    return -2;
+  else
+    if p_forcar then
+      update csf_opcoes set estoque = greatest(0, estoque - p_qtd) where id = p_id and estoque is not null returning estoque into novo;
+    else
+      update csf_opcoes set estoque = estoque - p_qtd where id = p_id and estoque is not null and estoque >= p_qtd returning estoque into novo;
+    end if;
+    if found then return novo; end if;
+    if exists (select 1 from csf_opcoes where id = p_id and estoque is null) or not exists (select 1 from csf_opcoes where id = p_id) then return -1; end if;
+    return -2;
+  end if;
+end;
+$$;
+
+create or replace function csf_devolver_estoque(p_tipo text, p_id bigint, p_qtd integer)
+returns void
+language plpgsql
+set search_path = public
+as $$
+begin
+  if p_tipo = 'prato' then
+    update csf_pratos set estoque = estoque + p_qtd where id = p_id and estoque is not null;
+  else
+    update csf_opcoes set estoque = estoque + p_qtd where id = p_id and estoque is not null;
+  end if;
+end;
+$$;
+
+-- Só o servidor (service_role) chama estas funções; a chave pública (anon) não.
+revoke execute on function csf_baixar_estoque(text, bigint, integer, boolean) from public, anon, authenticated;
+revoke execute on function csf_devolver_estoque(text, bigint, integer) from public, anon, authenticated;
+grant execute on function csf_baixar_estoque(text, bigint, integer, boolean) to service_role;
+grant execute on function csf_devolver_estoque(text, bigint, integer) to service_role;
+
+-- ---------------------------------------------------------------------------
 -- Storage (fotos dos pratos e logo do restaurante)
 --
 -- Cria o bucket "csf-uploads" (nome específico deste projeto, para não

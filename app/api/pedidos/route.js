@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getConfig } from '@/lib/config';
 import { gruposDosPratos } from '@/lib/opcoes';
+import { baixarEstoque, devolverEstoqueDosItens } from '@/lib/estoque';
 
 export async function POST(request) {
   const aberto = (await getConfig('loja_aberta')) !== '0';
@@ -56,12 +57,14 @@ export async function POST(request) {
 
     let adicional = 0;
     const textos = [];
+    const idsMarcados = [];
     for (const g of grupos) {
       const marcadas = g.opcoes.filter((o) => escolhidas.has(o.id));
       if (g.tipo === 'unica' && marcadas.length !== 1) {
         return Response.json({ erro: `Escolha uma opção de "${g.nome}" em ${prato.nome}.` }, { status: 400 });
       }
       if (marcadas.length) {
+        idsMarcados.push(...marcadas.map((o) => o.id));
         adicional += marcadas.reduce((soma, o) => soma + o.precoAdicional, 0);
         textos.push(`${g.nome}: ${marcadas.map((o) => o.nome).join(', ')}`);
       }
@@ -74,12 +77,17 @@ export async function POST(request) {
       prato_id: prato.id,
       nome_prato: prato.nome,
       opcoes: textos.join(' · '),
+      opcoes_ids: idsMarcados.join(','),
       observacao: String(item.observacao || '').trim().slice(0, 200),
       preco_unitario: precoUnitario,
       quantidade: qtd,
       subtotal,
     });
   }
+
+  // Desconta do estoque (atômico). Se faltar algo, nada é descontado e o pedido não é criado.
+  const baixa = await baixarEstoque(itensValidos);
+  if (baixa.erro) return Response.json({ erro: baixa.erro }, { status: baixa.status });
 
   const criadoEm = new Date().toISOString();
   const { data: pedido, error: erroPedido } = await db
@@ -93,12 +101,19 @@ export async function POST(request) {
     })
     .select('id')
     .single();
-  if (erroPedido) return Response.json({ erro: erroPedido.message }, { status: 500 });
+  if (erroPedido) {
+    await devolverEstoqueDosItens(itensValidos);
+    return Response.json({ erro: erroPedido.message }, { status: 500 });
+  }
 
   const { error: erroItens } = await db
     .from('csf_itens_pedido')
     .insert(itensValidos.map((item) => ({ ...item, pedido_id: pedido.id })));
-  if (erroItens) return Response.json({ erro: erroItens.message }, { status: 500 });
+  if (erroItens) {
+    await db.from('csf_pedidos').delete().eq('id', pedido.id);
+    await devolverEstoqueDosItens(itensValidos);
+    return Response.json({ erro: erroItens.message }, { status: 500 });
+  }
 
   return Response.json({ pedidoId: pedido.id, total, criadoEm }, { status: 201 });
 }
