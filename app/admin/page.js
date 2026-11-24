@@ -2309,6 +2309,15 @@ function AbaWhatsapp() {
       <div className="cartao">
         <h3>Conexão com o WhatsApp</h3>
         {situacao}
+        <div style={{ marginTop: 10 }}>
+          <a className="btn-secundario" href="https://web.whatsapp.com" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'inline-block' }}>
+            Abrir o WhatsApp Web
+          </a>
+          <div style={{ fontSize: '0.8rem', color: '#777', marginTop: 4 }}>
+            Abre em outra aba (o WhatsApp não deixa aparecer dentro de outro site). Serve para conversar com os clientes; é
+            separado do envio automático.
+          </div>
+        </div>
       </div>
 
       <div className="cartao">
@@ -2395,6 +2404,16 @@ function AbaWhatsapp() {
             <small style={{ color: '#888' }}>
               {new Date(m.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })}
             </small>
+            <a
+              className="btn-secundario"
+              href={`https://web.whatsapp.com/send?phone=${m.telefone}&text=${encodeURIComponent(m.texto || '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ textDecoration: 'none' }}
+              title="Abre a conversa no WhatsApp Web com a mensagem pronta; é só apertar Enviar"
+            >
+              Abrir conversa
+            </a>
             {m.status === 'erro' && (
               <button className="btn-secundario" type="button" onClick={() => acao({ acao: 'reenviar', id: m.id })}>
                 Tentar de novo

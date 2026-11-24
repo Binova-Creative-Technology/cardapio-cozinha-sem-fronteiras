@@ -13,7 +13,7 @@ export async function GET() {
 
   const { data: mensagens } = await supabaseAdmin()
     .from('csf_whatsapp_mensagens')
-    .select('id, nome, telefone, status, tentativas, erro, criado_em, enviado_em')
+    .select('id, nome, telefone, texto, status, tentativas, erro, criado_em, enviado_em')
     .order('criado_em', { ascending: false })
     .limit(30);
 
