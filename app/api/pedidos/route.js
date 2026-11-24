@@ -53,6 +53,11 @@ export async function POST(request) {
       if (!todasOpcoes.has(id)) {
         return Response.json({ erro: `Opção inválida para "${prato.nome}".` }, { status: 400 });
       }
+      // opção desativada pelo restaurante ("acabou")
+      const desativada = grupos.flatMap((g) => g.opcoes).find((o) => o.id === id && o.ativo === false);
+      if (desativada) {
+        return Response.json({ erro: `"${desativada.nome}" acabou. Escolha outra opção em ${prato.nome}.` }, { status: 409 });
+      }
     }
 
     let adicional = 0;

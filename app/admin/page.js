@@ -1381,6 +1381,7 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
               descricao: o.descricao || '',
               precoAdicional: String(o.precoAdicional || ''),
               id: o.id, // para a opção não perder o que consome do estoque ao salvar
+              ativo: o.ativo !== false,
             })),
           })),
         ),
@@ -1403,6 +1404,20 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
   }
   function novaOpcao() {
     return { nome: '', descricao: '', precoAdicional: '' };
+  }
+
+  // Liga/desliga uma opção ("acabou"). Se ela já está salva, vale na hora, sem precisar clicar em Salvar.
+  async function alternarAtiva(gi, oi) {
+    const opcao = grupos[gi].opcoes[oi];
+    const novoValor = opcao.ativo === false;
+    if (opcao.id) {
+      try {
+        await api('/opcoes/' + opcao.id, { method: 'PATCH', body: JSON.stringify({ ativo: novoValor }) });
+      } catch (err) {
+        return alert(err.message);
+      }
+    }
+    mudarOpcao(gi, oi, { ativo: novoValor });
   }
 
   async function copiar() {
@@ -1505,6 +1520,14 @@ function EditorOpcoes({ prato, irmaos, onFechar }) {
                   onChange={(e) => mudarOpcao(gi, oi, { precoAdicional: e.target.value })}
                   style={{ maxWidth: 160 }}
                 />
+                <button
+                  className={o.ativo === false ? 'btn-perigo' : 'btn-secundario'}
+                  type="button"
+                  title={o.ativo === false ? 'Acabou — clique para voltar a oferecer' : 'Clique quando acabar'}
+                  onClick={() => alternarAtiva(gi, oi)}
+                >
+                  {o.ativo === false ? '⛔ Acabou (ativar)' : '✔ Disponível'}
+                </button>
                 <button
                   className="btn-secundario"
                   type="button"

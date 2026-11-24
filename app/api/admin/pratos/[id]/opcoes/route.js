@@ -39,6 +39,7 @@ export async function PUT(request, { params }) {
         descricao: String(o?.descricao || '').trim().slice(0, 200),
         // id que a opção tinha antes (para não perder o que ela consome do estoque ao regravar)
         idAntigo: Number.isInteger(Number(o?.id)) && Number(o.id) > 0 ? Number(o.id) : null,
+        ativo: o?.ativo !== false,
         precoAdicional: Number(String(o?.precoAdicional ?? 0).replace(',', '.')) || 0,
       }))
       .filter((o) => o.nome);
@@ -90,6 +91,7 @@ export async function PUT(request, { params }) {
           grupo_id: grupo.id,
           nome: o.nome,
           descricao: o.descricao,
+          ativo: o.ativo,
           preco_adicional: o.precoAdicional,
           ordem: oi,
         })),

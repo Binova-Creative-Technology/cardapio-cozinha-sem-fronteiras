@@ -85,6 +85,9 @@ create table if not exists csf_opcoes (
   ordem integer not null default 0
 );
 
+-- Opção desativada = "acabou": aparece como Esgotado para o cliente, sem precisar excluir
+alter table csf_opcoes add column if not exists ativo boolean not null default true;
+
 -- Descrição opcional de cada opção (aparece para o cliente ao escolher)
 alter table csf_opcoes add column if not exists descricao text default '';
 

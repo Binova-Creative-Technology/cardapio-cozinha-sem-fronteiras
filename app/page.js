@@ -543,7 +543,9 @@ function PaginaCliente() {
 // Prato sem estoque, ou com um grupo obrigatório em que todas as opções acabaram
 function pratoEsgotado(prato) {
   if (prato.estoque === 0) return true;
-  return (prato.grupos || []).some((g) => g.tipo === 'unica' && g.opcoes.length > 0 && g.opcoes.every((o) => o.estoque === 0));
+  return (prato.grupos || []).some(
+    (g) => g.tipo === 'unica' && g.opcoes.length > 0 && g.opcoes.every((o) => o.estoque === 0 || o.ativo === false),
+  );
 }
 
 function ModalOpcoes({ prato, onFechar, onAdicionar, limiteQuantidade }) {
@@ -590,7 +592,7 @@ function ModalOpcoes({ prato, onFechar, onAdicionar, limiteQuantidade }) {
             <div className="dica">{g.tipo === 'unica' ? 'Escolha 1 (obrigatório)' : 'Opcional — marque quantos quiser (valor à parte)'}</div>
             {g.opcoes.map((o) => {
               const marcada = (escolhas[g.id] || []).includes(o.id);
-              const acabou = o.estoque === 0;
+              const acabou = o.estoque === 0 || o.ativo === false;
               return (
                 <label className={'opcao-linha' + (marcada ? ' marcada' : '') + (acabou ? ' esgotada' : '')} key={o.id}>
                   <input
