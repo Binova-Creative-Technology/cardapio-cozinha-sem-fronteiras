@@ -43,7 +43,19 @@ if (!SISTEMA_URL || !CHAVE) {
   process.exit(1);
 }
 
-const PASTA_AUTH = path.join(__dirname, 'auth');
+// Onde fica a sessão do WhatsApp. Na nuvem (Railway) aponte AUTH_DIR para o volume, ex: /data/auth
+const PASTA_AUTH = env.AUTH_DIR ? path.resolve(env.AUTH_DIR) : path.join(__dirname, 'auth');
+
+// Apaga o conteúdo da pasta (e não a pasta em si, que pode ser um volume montado)
+function limparSessao() {
+  try {
+    for (const nome of fs.readdirSync(PASTA_AUTH)) {
+      fs.rmSync(path.join(PASTA_AUTH, nome), { recursive: true, force: true });
+    }
+  } catch {
+    // pasta ainda não existe: nada a limpar
+  }
+}
 const logger = pino({ level: 'silent' });
 
 function log(...partes) {
@@ -140,7 +152,7 @@ async function conectar() {
       if (codigo === DisconnectReason.loggedOut) {
         // saiu pelo celular ("Aparelhos conectados" -> sair): apaga a sessão e pede um QR novo
         log('O WhatsApp foi desconectado pelo celular. Vou gerar um QR Code novo.');
-        fs.rmSync(PASTA_AUTH, { recursive: true, force: true });
+        limparSessao();
         numeroConectado = '';
       } else {
         log('Conexão caiu (código ' + codigo + '). Reconectando...');
