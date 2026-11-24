@@ -414,6 +414,215 @@ function formatarMesLabel(m) {
   return `${nomes[Number(mes) - 1]}/${ano}`;
 }
 
+// A equipe monta um pedido novo dentro de uma comanda (adicionar algo que o cliente pediu depois).
+function ModalAdicionarItens({ mesa, onFechar, onCriado }) {
+  const [cardapio, setCardapio] = useState(null);
+  const [catId, setCatId] = useState('');
+  const [pratoSel, setPratoSel] = useState(null);
+  const [escolhas, setEscolhas] = useState({});
+  const [qtd, setQtd] = useState(1);
+  const [obs, setObs] = useState('');
+  const [lista, setLista] = useState([]); // linhas já montadas
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  useEffect(() => {
+    fetch('/api/cardapio')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!Array.isArray(data)) throw new Error();
+        // só o que dá para pedir agora (o que acabou nem aparece)
+        const visivel = data
+          .map((c) => ({ ...c, pratos: c.pratos.filter((p) => p.estoque !== 0) }))
+          .filter((c) => c.pratos.length > 0);
+        setCardapio(visivel);
+        if (visivel[0]) setCatId(String(visivel[0].id));
+      })
+      .catch(() => setErro('Não foi possível carregar o cardápio.'));
+  }, []);
+
+  function abrirPrato(prato) {
+    setPratoSel(prato);
+    setEscolhas({});
+    setQtd(1);
+    setObs('');
+    setErro('');
+  }
+
+  const gruposDe = (prato) =>
+    prato.grupos
+      .map((g) => ({ ...g, opcoes: g.opcoes.filter((o) => o.estoque !== 0 && o.ativo !== false) }))
+      .filter((g) => g.opcoes.length > 0);
+
+  function marcar(g, o) {
+    setEscolhas((atual) => {
+      const marcadas = atual[g.id] || [];
+      if (g.tipo === 'unica') return { ...atual, [g.id]: [o.id] };
+      return { ...atual, [g.id]: marcadas.includes(o.id) ? marcadas.filter((x) => x !== o.id) : [...marcadas, o.id] };
+    });
+  }
+
+  function adicionarNaLista() {
+    const grupos = gruposDe(pratoSel);
+    const faltando = grupos.find((g) => g.tipo === 'unica' && !(escolhas[g.id] || []).length);
+    if (faltando) return setErro(`Escolha uma opção de "${faltando.nome}".`);
+    const opcoes = grupos.flatMap((g) => g.opcoes.filter((o) => (escolhas[g.id] || []).includes(o.id)));
+    setLista((atual) => [
+      ...atual,
+      {
+        pratoId: pratoSel.id,
+        nome: pratoSel.nome.trim(),
+        quantidade: qtd,
+        opcoes: opcoes.map((o) => o.id),
+        textoOpcoes: opcoes.map((o) => o.nome).join(' · '),
+        observacao: obs.trim(),
+      },
+    ]);
+    setPratoSel(null);
+  }
+
+  async function enviar() {
+    if (lista.length === 0) return;
+    setEnviando(true);
+    setErro('');
+    try {
+      const r = await api('/pedidos/novo', {
+        method: 'POST',
+        body: JSON.stringify({
+          mesa,
+          itens: lista.map((l) => ({ pratoId: l.pratoId, quantidade: l.quantidade, opcoes: l.opcoes, observacao: l.observacao })),
+        }),
+      });
+      onCriado(r);
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  const categoria = cardapio?.find((c) => String(c.id) === catId);
+
+  return (
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 520 }}>
+        <h3>Adicionar à comanda — {mesa}</h3>
+
+        {!cardapio && !erro && <div className="vazio">Carregando cardápio...</div>}
+
+        {cardapio && !pratoSel && (
+          <>
+            <select value={catId} onChange={(e) => setCatId(e.target.value)} style={{ width: '100%', padding: 8 }}>
+              {cardapio.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+            <div style={{ marginTop: 8 }}>
+              {categoria?.pratos.map((p) => (
+                <div className="linha-item" key={p.id} style={{ alignItems: 'center' }}>
+                  <span>
+                    {p.nome.trim()} <small style={{ color: '#888' }}>{formatarMoeda(p.preco)}</small>
+                  </span>
+                  <button className="btn-secundario" type="button" onClick={() => abrirPrato(p)}>
+                    Escolher
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {pratoSel && (
+          <>
+            <h4 style={{ margin: '8px 0 0' }}>{pratoSel.nome.trim()}</h4>
+            {gruposDe(pratoSel).map((g) => (
+              <div className="grupo-opcoes" key={g.id}>
+                <h4>{g.nome}</h4>
+                <div className="dica">{g.tipo === 'unica' ? 'Escolha 1' : 'Opcional'}</div>
+                {g.opcoes.map((o) => {
+                  const marcada = (escolhas[g.id] || []).includes(o.id);
+                  return (
+                    <label className={'opcao-linha' + (marcada ? ' marcada' : '')} key={o.id}>
+                      <input
+                        type={g.tipo === 'unica' ? 'radio' : 'checkbox'}
+                        name={'adm-grupo-' + g.id}
+                        checked={marcada}
+                        onChange={() => marcar(g, o)}
+                      />
+                      <span className="opcao-nome">{o.nome}</span>
+                      {o.precoAdicional > 0 && <span className="opcao-preco">+ {formatarMoeda(o.precoAdicional)}</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            ))}
+            <div className="linha-item" style={{ marginTop: 12, alignItems: 'center' }}>
+              <span>Quantidade</span>
+              <div className="qtd-controle">
+                <button type="button" onClick={() => setQtd((q) => Math.max(1, q - 1))}>
+                  −
+                </button>
+                <span>{qtd}</span>
+                <button type="button" onClick={() => setQtd((q) => Math.min(99, q + 1))}>
+                  +
+                </button>
+              </div>
+            </div>
+            <input
+              type="text"
+              placeholder="Observação deste prato (opcional)"
+              maxLength={200}
+              value={obs}
+              onChange={(e) => setObs(e.target.value)}
+            />
+            <div className="acoes">
+              <button className="btn-cancelar" type="button" onClick={() => setPratoSel(null)}>
+                Voltar
+              </button>
+              <button className="btn-confirmar" type="button" onClick={adicionarNaLista}>
+                Colocar na lista
+              </button>
+            </div>
+          </>
+        )}
+
+        {lista.length > 0 && !pratoSel && (
+          <div style={{ marginTop: 12, borderTop: '1px solid #eee', paddingTop: 8 }}>
+            <strong>Vai para a comanda:</strong>
+            {lista.map((l, i) => (
+              <div className="linha-item" key={i} style={{ alignItems: 'center' }}>
+                <span>
+                  {l.quantidade}x {l.nome}
+                  {l.textoOpcoes && <small style={{ display: 'block', color: '#888' }}>{l.textoOpcoes}</small>}
+                  {l.observacao && <small style={{ display: 'block', color: '#7a5a12' }}>Obs: {l.observacao}</small>}
+                </span>
+                <button className="btn-secundario" type="button" onClick={() => setLista((a) => a.filter((_, j) => j !== i))}>
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {erro && <div className="erro">{erro}</div>}
+
+        {!pratoSel && (
+          <div className="acoes">
+            <button className="btn-cancelar" type="button" onClick={onFechar}>
+              Cancelar
+            </button>
+            <button className="btn-confirmar" type="button" disabled={lista.length === 0 || enviando} onClick={enviar}>
+              {enviando ? 'Enviando...' : 'Enviar para a cozinha'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AbaPedidos({
   fechamentosPendentes,
   onImprimirConta,
@@ -427,6 +636,7 @@ function AbaPedidos({
   const [pedidos, setPedidos] = useState([]);
   const [resumo, setResumo] = useState({ totalPedidos: 0, faturamento: 0 });
   const [expandidoId, setExpandidoId] = useState(null);
+  const [adicionandoMesa, setAdicionandoMesa] = useState(null);
 
   // Valores de vendas (faturamento do mês e total de cada dia) ficam tampados por padrão;
   // o botão mostra/esconde e a escolha fica lembrada neste computador.
@@ -478,6 +688,25 @@ function AbaPedidos({
       const t = new Date(f.criado_em).getTime();
       return f.mesa === p.mesa && t >= criado && t - criado < 18 * 3600000;
     });
+  }
+
+  // Tira 1 unidade ('menos') ou o prato todo ('tirar') de um pedido; o estoque volta e os valores se refazem.
+  async function ajustarItem(item, acao, pedido) {
+    if (acao === 'tirar' && !confirm(`Tirar "${item.nome_prato.trim()}" (${item.quantidade}x) deste pedido?`)) return;
+    try {
+      if (acao === 'menos') {
+        await api(`/itens/${item.id}`, { method: 'PATCH', body: JSON.stringify({ delta: -1 }) });
+      } else {
+        const r = await api(`/itens/${item.id}`, { method: 'DELETE' });
+        if (r.pedidoRemovido && pedido) {
+          setExpandidoId(null);
+          alert('Esse era o único item: o pedido foi removido.');
+        }
+      }
+      carregarPedidos(mes);
+    } catch (err) {
+      alert(err.message);
+    }
   }
 
   async function excluirPedido(p) {
@@ -678,14 +907,44 @@ function AbaPedidos({
                                 </div>
                               )}
                             </span>
-                            <span style={{ color: '#555' }}>
+                            <span style={{ color: '#555', whiteSpace: 'nowrap' }}>
                               {formatarMoeda(i.preco_unitario)} cada — <strong>{formatarMoeda(i.subtotal)}</strong>
+                              {!fechado && p.status !== 'cancelado' && (
+                                <>
+                                  {i.quantidade > 1 && (
+                                    <button
+                                      className="btn-secundario"
+                                      type="button"
+                                      title="Tirar 1 unidade"
+                                      style={{ marginLeft: 8 }}
+                                      onClick={() => ajustarItem(i, 'menos')}
+                                    >
+                                      −1
+                                    </button>
+                                  )}
+                                  <button
+                                    className="btn-perigo"
+                                    type="button"
+                                    style={{ marginLeft: 6 }}
+                                    onClick={() => ajustarItem(i, 'tirar', p)}
+                                  >
+                                    Tirar
+                                  </button>
+                                </>
+                              )}
                             </span>
                           </div>
                         ))}
                         {p.observacao && (
                           <div style={{ marginTop: 6, color: '#7a5a12' }}>
                             <strong>Observação:</strong> {p.observacao}
+                          </div>
+                        )}
+                        {!fechado && p.status !== 'cancelado' && p.mesa && (
+                          <div style={{ marginTop: 8 }}>
+                            <button className="btn" type="button" onClick={() => setAdicionandoMesa(p.mesa)}>
+                              + Adicionar à comanda ({p.mesa})
+                            </button>
                           </div>
                         )}
                       </td>
@@ -697,6 +956,18 @@ function AbaPedidos({
           </tbody>
         </table>
       </div>
+
+      {adicionandoMesa && (
+        <ModalAdicionarItens
+          mesa={adicionandoMesa}
+          onFechar={() => setAdicionandoMesa(null)}
+          onCriado={(r) => {
+            setAdicionandoMesa(null);
+            carregarPedidos(mes);
+            alert(`Pedido nº ${r.pedidoId} criado na comanda. Use "Imprimir" na linha dele para mandar para a cozinha.`);
+          }}
+        />
+      )}
     </>
   );
 }
