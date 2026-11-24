@@ -62,6 +62,7 @@ function PaginaCliente() {
 
   const [pratoEscolhendo, setPratoEscolhendo] = useState(null);
   const [pratoVendo, setPratoVendo] = useState(null); // foto ampliada
+  const [avisoRetirados, setAvisoRetirados] = useState('');
   const [categoriaAtiva, setCategoriaAtiva] = useState(null); // aba do cardápio
   const [modalRevisao, setModalRevisao] = useState(false);
   const [modalFecharConta, setModalFecharConta] = useState(false);
@@ -152,6 +153,47 @@ function PaginaCliente() {
       .finally(() => setCarregandoCardapio(false));
   }
 
+  // Enquanto o cliente está pedindo, o cardápio se atualiza sozinho: o que acabou some,
+  // e o que ele já tinha escolhido e acabou sai do pedido (com aviso).
+  useEffect(() => {
+    if (tela !== 'pedido') return;
+    let ativo = true;
+    const atualizar = () => {
+      fetch('/api/cardapio')
+        .then((r) => r.json())
+        .then((data) => {
+          if (!ativo || !Array.isArray(data)) return;
+          setCardapio(data);
+          const porId = new Map(data.flatMap((cat) => cat.pratos).map((p) => [p.id, p]));
+          setCarrinho((atual) => {
+            const retirados = [];
+            const novo = {};
+            for (const [chave, item] of Object.entries(atual)) {
+              const prato = porId.get(item.prato.id);
+              const opcoesAtuais = prato ? prato.grupos.flatMap((g) => g.opcoes) : [];
+              const sumiu =
+                !prato ||
+                pratoEsgotado(prato) ||
+                item.opcoes.some((o) => {
+                  const atualOpcao = opcoesAtuais.find((x) => x.id === o.id);
+                  return !atualOpcao || atualOpcao.estoque === 0 || atualOpcao.ativo === false;
+                });
+              if (sumiu && item.quantidade > 0) retirados.push(item.prato.nome.trim());
+              else novo[chave] = item;
+            }
+            if (retirados.length) setAvisoRetirados(`Acabou e saiu do seu pedido: ${[...new Set(retirados)].join(', ')}.`);
+            return retirados.length ? novo : atual;
+          });
+        })
+        .catch(() => {});
+    };
+    const timer = setInterval(atualizar, 20000);
+    return () => {
+      ativo = false;
+      clearInterval(timer);
+    };
+  }, [tela]);
+
   // Cada linha do carrinho é um prato + as opções escolhidas (mesmo prato com
   // opções diferentes vira linhas diferentes).
   function alterarPorChave(chave, delta) {
@@ -192,8 +234,15 @@ function PaginaCliente() {
     setPratoEscolhendo(null);
   }
 
-  const categoriaAtual = Array.isArray(cardapio)
-    ? cardapio.find((c) => c.id === categoriaAtiva) || cardapio[0]
+  // Prato que acabou (estoque zerado ou sem opção obrigatória) some do cardápio sozinho;
+  // quando o estoque volta, ele volta.
+  const cardapioVisivel = Array.isArray(cardapio)
+    ? cardapio
+        .map((cat) => ({ ...cat, pratos: cat.pratos.filter((p) => !pratoEsgotado(p)) }))
+        .filter((cat) => cat.pratos.length > 0)
+    : cardapio;
+  const categoriaAtual = Array.isArray(cardapioVisivel)
+    ? cardapioVisivel.find((c) => c.id === categoriaAtiva) || cardapioVisivel[0]
     : undefined;
 
   const itensCarrinho = Object.values(carrinho).filter((i) => i.quantidade > 0);
@@ -359,9 +408,9 @@ function PaginaCliente() {
               )}
             </div>
             <div className="mesa">{mesaLabel}</div>
-            {Array.isArray(cardapio) && cardapio.length > 0 && (
+            {Array.isArray(cardapioVisivel) && cardapioVisivel.length > 0 && (
               <nav className="abas-cardapio">
-                {cardapio.map((cat) => (
+                {cardapioVisivel.map((cat) => (
                   <button
                     key={cat.id}
                     type="button"
@@ -382,12 +431,18 @@ function PaginaCliente() {
             <div className="aviso-fechado">O restaurante não está aceitando pedidos no momento. Fale com a equipe.</div>
           )}
 
+          {avisoRetirados && (
+            <div className="aviso-fechado" onClick={() => setAvisoRetirados('')} style={{ cursor: 'pointer' }}>
+              {avisoRetirados} <u>Fechar</u>
+            </div>
+          )}
+
           <main>
             {carregandoCardapio && <div className="vazio">Carregando cardápio...</div>}
             {!carregandoCardapio && cardapio === null && (
               <div className="vazio">Não foi possível carregar o cardápio. Verifique sua conexão.</div>
             )}
-            {!carregandoCardapio && cardapio && cardapio.length === 0 && (
+            {!carregandoCardapio && cardapioVisivel && cardapioVisivel.length === 0 && (
               <div className="vazio">Cardápio ainda não disponível. Fale com a equipe.</div>
             )}
             {!carregandoCardapio &&
