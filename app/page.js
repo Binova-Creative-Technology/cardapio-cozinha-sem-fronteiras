@@ -565,12 +565,17 @@ function ModalOpcoes({ prato, onFechar, onAdicionar, limiteQuantidade }) {
     });
   }
 
-  const selecionadas = prato.grupos.flatMap((g) => g.opcoes.filter((o) => (escolhas[g.id] || []).includes(o.id)).map((o) => ({ ...o, grupo: g.nome })));
+  // Opção que acabou (desativada ou sem estoque) nem aparece para o cliente
+  const grupos = prato.grupos
+    .map((g) => ({ ...g, opcoes: g.opcoes.filter((o) => o.estoque !== 0 && o.ativo !== false) }))
+    .filter((g) => g.opcoes.length > 0);
+
+  const selecionadas = grupos.flatMap((g) => g.opcoes.filter((o) => (escolhas[g.id] || []).includes(o.id)).map((o) => ({ ...o, grupo: g.nome })));
   const precoUnit = Number(prato.preco) + selecionadas.reduce((soma, o) => soma + o.precoAdicional, 0);
   const limite = limiteQuantidade(prato, selecionadas.map((o) => o.id));
 
   function confirmar() {
-    const faltando = prato.grupos.find((g) => g.tipo === 'unica' && !(escolhas[g.id] || []).length);
+    const faltando = grupos.find((g) => g.tipo === 'unica' && !(escolhas[g.id] || []).length);
     if (faltando) {
       setErro(`Escolha uma opção de "${faltando.nome}".`);
       return;
@@ -586,7 +591,7 @@ function ModalOpcoes({ prato, onFechar, onAdicionar, limiteQuantidade }) {
     <div className="overlay">
       <div className="modal">
         <h3>{prato.nome}</h3>
-        {prato.grupos.map((g) => (
+        {grupos.map((g) => (
           <div className="grupo-opcoes" key={g.id}>
             <h4>{g.nome}</h4>
             <div className="dica">{g.tipo === 'unica' ? 'Escolha 1 (obrigatório)' : 'Opcional — marque quantos quiser (valor à parte)'}</div>
