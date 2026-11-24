@@ -672,8 +672,8 @@ function FormContato({ titulo, nome, setNome, whatsapp, setWhatsapp, onContinuar
         style={campo}
       />
       <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.78rem', marginTop: 6, lineHeight: 1.35 }}>
-        Se informar o WhatsApp, a casa manda uma mensagem de agradecimento depois que você pagar. Só usamos para isso e não
-        compartilhamos. Pode deixar em branco.
+        Informe seu WhatsApp para receber as últimas novidades da loja. Não é obrigatório: se preferir, pode deixar em
+        branco.
       </div>
       <button className="opcao-escolha" style={{ marginTop: 10, justifyContent: 'center' }} onClick={onContinuar} type="button">
         Continuar
