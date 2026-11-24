@@ -428,6 +428,25 @@ function AbaPedidos({
   const [resumo, setResumo] = useState({ totalPedidos: 0, faturamento: 0 });
   const [expandidoId, setExpandidoId] = useState(null);
 
+  // Valores de vendas (faturamento do mês e total de cada dia) ficam tampados por padrão;
+  // o botão mostra/esconde e a escolha fica lembrada neste computador.
+  const [mostrarVendas, setMostrarVendas] = useState(false);
+  useEffect(() => {
+    try {
+      setMostrarVendas(localStorage.getItem('csf_mostrar_vendas') === '1');
+    } catch {}
+  }, []);
+  function alternarVendas() {
+    setMostrarVendas((atual) => {
+      const novo = !atual;
+      try {
+        localStorage.setItem('csf_mostrar_vendas', novo ? '1' : '0');
+      } catch {}
+      return novo;
+    });
+  }
+  const tampado = 'R$ ••••••';
+
   const carregarPedidos = useCallback((mesAtual) => {
     if (!mesAtual) return;
     api('/pedidos?mes=' + mesAtual).then(setPedidos);
@@ -521,11 +540,14 @@ function AbaPedidos({
             </option>
           ))}
         </select>
+        <button className="btn-secundario" type="button" onClick={alternarVendas}>
+          {mostrarVendas ? '🙈 Tampar valor das vendas' : '👁 Mostrar valor das vendas'}
+        </button>
       </div>
 
       <div className="resumo-grid">
         <div className="cartao">
-          <div className="valor">{formatarMoeda(resumo.faturamento)}</div>
+          <div className="valor">{mostrarVendas ? formatarMoeda(resumo.faturamento) : tampado}</div>
           <div className="rotulo">Faturamento do mês</div>
         </div>
         <div className="cartao">
@@ -585,7 +607,7 @@ function AbaPedidos({
                         <span>
                           {' '}
                           · {validosDoDia.length} {validosDoDia.length === 1 ? 'pedido' : 'pedidos'} ·{' '}
-                          {formatarMoeda(totalDoDia)}
+                          {mostrarVendas ? formatarMoeda(totalDoDia) : tampado}
                         </span>
                       </td>
                     </tr>
