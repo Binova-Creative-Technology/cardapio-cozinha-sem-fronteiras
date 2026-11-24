@@ -461,6 +461,16 @@ button.btn-perigo { background: #fdecea; color: #a3352b; border: none; padding: 
 .selo-estoque.baixo { background: #fff0cc; color: #8a5a00; }
 .selo-estoque.zero { background: #fde1df; color: #b71c1c; }
 
+/* Aba WhatsApp */
+.zap-aviso { border-radius: 10px; padding: 12px 14px; font-size: 0.95rem; line-height: 1.45; }
+.zap-aviso.zap-ok { background: #e3f4e6; color: #17592f; }
+.zap-aviso.zap-atencao { background: #fff4d6; color: #6b4a00; }
+.zap-aviso.zap-ruim { background: #fde1df; color: #8a1c14; }
+.zap-linha { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.zap-dado { background: #faf7f2; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
+.zap-dado small { display: block; color: #777; font-size: 0.75rem; }
+.zap-dado code { word-break: break-all; font-size: 0.85rem; user-select: all; }
+
 /* Pedidos dentro de uma comanda */
 .pedido-na-comanda { background: #fff; border: 1px solid #e5ddd0; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
 .pedido-na-comanda.pedido-novo { animation: piscar-pedido 1s ease-in-out infinite; }

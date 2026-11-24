@@ -302,6 +302,7 @@ function Painel({ config, onLogout, onConfigAtualizado }) {
           ['relatorio', 'Relatório'],
           ['cardapio', 'Cardápio'],
           ['estoque', 'Estoque'],
+          ['whatsapp', 'WhatsApp'],
           ['qrcodes', 'QR Codes'],
           ['config', 'Configurações'],
         ].map(([id, rotulo]) => (
@@ -325,6 +326,7 @@ function Painel({ config, onLogout, onConfigAtualizado }) {
         {aba === 'relatorio' && <AbaRelatorio gatilhoAtualizacao={gatilhoAtualizacao} />}
         {aba === 'cardapio' && <AbaCardapio />}
         {aba === 'estoque' && <AbaEstoque gatilhoAtualizacao={gatilhoAtualizacao} />}
+        {aba === 'whatsapp' && <AbaWhatsapp />}
         {aba === 'qrcodes' && <AbaQrCodes />}
         {aba === 'config' && <AbaConfig config={config} onConfigAtualizado={onConfigAtualizado} />}
       </main>
@@ -2205,6 +2207,231 @@ function AbaQrCodes() {
             </button>
           </div>
         ))}
+      </div>
+    </>
+  );
+}
+
+const ROTULO_ZAP = { pendente: 'na fila', enviando: 'enviando...', enviada: 'enviada ✔', erro: 'erro' };
+
+function AbaWhatsapp() {
+  const [dados, setDados] = useState(null);
+  const [form, setForm] = useState(null); // edição da configuração
+  const [salvando, setSalvando] = useState(false);
+  const [telefoneTeste, setTelefoneTeste] = useState('');
+
+  const carregar = useCallback(async () => {
+    try {
+      const d = await api('/whatsapp');
+      setDados(d);
+      setForm((atual) => atual || { ...d.config });
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    carregar();
+    const timer = setInterval(carregar, 5000); // acompanha o QR e as mensagens
+    return () => clearInterval(timer);
+  }, [carregar]);
+
+  async function salvar() {
+    setSalvando(true);
+    try {
+      await api('/whatsapp', { method: 'POST', body: JSON.stringify(form) });
+      alert('Configuração salva!');
+      carregar();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function acao(corpo, mensagemOk) {
+    try {
+      const r = await api('/whatsapp/acao', { method: 'POST', body: JSON.stringify(corpo) });
+      if (mensagemOk) {
+        alert(
+          mensagemOk +
+            (r.avisoDesligado ? '\n\nAtenção: o envio automático está DESLIGADO acima, então ela só sai depois que você ligar.' : ''),
+        );
+      }
+      carregar();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  if (!dados || !form) return <div className="vazio">Carregando...</div>;
+  const { estado, mensagens, token } = dados;
+  const urlDoSistema = typeof window !== 'undefined' ? window.location.origin : '';
+
+  let situacao;
+  if (!estado.online) {
+    situacao = (
+      <div className="zap-aviso zap-ruim">
+        <strong>O programa do WhatsApp não está ligado.</strong> Ele precisa ficar aberto no computador do restaurante (veja
+        "Como instalar" mais abaixo). Enquanto isso, as mensagens ficam na fila e saem quando ele ligar.
+      </div>
+    );
+  } else if (estado.status === 'aguardando_qr') {
+    situacao = (
+      <div className="zap-aviso zap-atencao">
+        <strong>Conecte o seu WhatsApp:</strong> no celular, abra o WhatsApp → <b>Aparelhos conectados</b> → <b>Conectar um
+        aparelho</b> e aponte a câmera para este QR Code.
+        <div style={{ marginTop: 10 }}>
+          <img
+            src={'/api/admin/qrcode?url=' + encodeURIComponent(estado.qr)}
+            alt="QR Code do WhatsApp"
+            style={{ width: 260, maxWidth: '100%', background: '#fff', padding: 8, borderRadius: 8 }}
+          />
+        </div>
+        <div style={{ fontSize: '0.8rem', marginTop: 6 }}>O QR muda sozinho a cada poucos segundos; se não ler, espere o próximo.</div>
+      </div>
+    );
+  } else if (estado.status === 'conectado') {
+    situacao = (
+      <div className="zap-aviso zap-ok">
+        ✔ <strong>WhatsApp conectado</strong>
+        {estado.numero ? ` (número ${estado.numero})` : ''}. As mensagens saem sozinhas.
+      </div>
+    );
+  } else {
+    situacao = (
+      <div className="zap-aviso zap-atencao">
+        O programa está ligado, mas o WhatsApp ainda não conectou ({estado.status}). Aguarde alguns segundos.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="cartao">
+        <h3>Conexão com o WhatsApp</h3>
+        {situacao}
+      </div>
+
+      <div className="cartao">
+        <h3>Mensagem de agradecimento</h3>
+        <p style={{ fontSize: '0.9rem', color: '#666', margin: '0 0 8px' }}>
+          Quando você clica em <b>Concluído</b> na conta, o sistema manda esta mensagem para o WhatsApp que o cliente
+          informou (só se ele informou).
+        </p>
+        <label className="zap-linha">
+          <input
+            type="checkbox"
+            checked={form.ativo}
+            onChange={(e) => setForm({ ...form, ativo: e.target.checked })}
+            style={{ width: 'auto' }}
+          />
+          <span>
+            <b>Enviar automaticamente</b> depois que a conta é concluída
+          </span>
+        </label>
+        <input
+          type="text"
+          placeholder="Link para avaliar no Google (https://...)"
+          value={form.linkGoogle}
+          onChange={(e) => setForm({ ...form, linkGoogle: e.target.value })}
+          style={{ width: '100%', marginTop: 8 }}
+        />
+        <input
+          type="text"
+          placeholder="Link do Instagram (https://instagram.com/...)"
+          value={form.linkInstagram}
+          onChange={(e) => setForm({ ...form, linkInstagram: e.target.value })}
+          style={{ width: '100%', marginTop: 8 }}
+        />
+        <textarea
+          rows={9}
+          value={form.mensagem}
+          onChange={(e) => setForm({ ...form, mensagem: e.target.value })}
+          style={{ width: '100%', marginTop: 8, padding: 8, fontFamily: 'inherit' }}
+        />
+        <div style={{ fontSize: '0.8rem', color: '#777', margin: '4px 0 8px' }}>
+          Pode usar: <b>{'{nome}'}</b> (primeiro nome do cliente), <b>{'{loja}'}</b>, <b>{'{google}'}</b> e <b>{'{instagram}'}</b>.
+        </div>
+        <div className="linha-form" style={{ marginBottom: 0 }}>
+          <button className="btn" type="button" onClick={salvar} disabled={salvando}>
+            {salvando ? 'Salvando...' : 'Salvar'}
+          </button>
+          <button className="btn-secundario" type="button" onClick={() => setForm({ ...form, mensagem: dados.mensagemPadrao })}>
+            Voltar ao texto padrão
+          </button>
+        </div>
+      </div>
+
+      <div className="cartao">
+        <h3>Testar</h3>
+        <div className="linha-form" style={{ marginBottom: 0 }}>
+          <input
+            type="tel"
+            placeholder="Seu WhatsApp com DDD: (11) 91234-5678"
+            value={telefoneTeste}
+            onChange={(e) => setTelefoneTeste(e.target.value)}
+          />
+          <button
+            className="btn"
+            type="button"
+            onClick={() => acao({ acao: 'teste', telefone: telefoneTeste }, 'Mensagem de teste colocada na fila.')}
+          >
+            Enviar mensagem de teste
+          </button>
+        </div>
+      </div>
+
+      <div className="cartao">
+        <h3>Últimas mensagens</h3>
+        {mensagens.length === 0 && <p style={{ color: '#888', fontSize: '0.9rem', margin: 0 }}>Nenhuma ainda.</p>}
+        {mensagens.map((m) => (
+          <div className="linha-estoque" key={m.id}>
+            <div className="nome-estoque">
+              {m.nome || '—'} <small style={{ color: '#888' }}>({m.telefone})</small>
+              {m.erro && <div style={{ color: '#b71c1c', fontSize: '0.8rem' }}>{m.erro}</div>}
+            </div>
+            <span className={'selo-estoque ' + (m.status === 'enviada' ? 'ok' : m.status === 'erro' ? 'zero' : 'baixo')}>
+              {ROTULO_ZAP[m.status] || m.status}
+            </span>
+            <small style={{ color: '#888' }}>
+              {new Date(m.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })}
+            </small>
+            {m.status === 'erro' && (
+              <button className="btn-secundario" type="button" onClick={() => acao({ acao: 'reenviar', id: m.id })}>
+                Tentar de novo
+              </button>
+            )}
+            {(m.status === 'erro' || m.status === 'pendente') && (
+              <button className="btn-perigo" type="button" onClick={() => acao({ acao: 'cancelar', id: m.id })}>
+                Cancelar
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="cartao">
+        <h3>Como instalar o programa do WhatsApp</h3>
+        <ol style={{ margin: '0 0 8px', paddingLeft: 20, fontSize: '0.9rem', lineHeight: 1.5 }}>
+          <li>
+            No computador do restaurante (precisa ficar ligado e com internet), abra a pasta <b>whatsapp-worker</b> do projeto
+            e siga o arquivo <b>LEIA-ME.md</b> dela.
+          </li>
+          <li>Quando ele pedir, informe estes dois dados:</li>
+        </ol>
+        <div className="zap-dado">
+          <small>Endereço do sistema</small>
+          <code>{urlDoSistema}</code>
+        </div>
+        <div className="zap-dado">
+          <small>Chave de acesso (não mostre para ninguém)</small>
+          <code>{token}</code>
+        </div>
+        <ol start={3} style={{ margin: '8px 0 0', paddingLeft: 20, fontSize: '0.9rem', lineHeight: 1.5 }}>
+          <li>
+            Ao abrir, o programa mostra o <b>QR Code aqui nesta tela</b>. Leia com o WhatsApp do número que vai mandar as
+            mensagens.
+          </li>
+        </ol>
       </div>
     </>
   );

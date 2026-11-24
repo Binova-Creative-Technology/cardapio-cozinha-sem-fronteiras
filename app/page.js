@@ -60,6 +60,8 @@ function PaginaCliente() {
   const [lojaAberta, setLojaAberta] = useState(true);
   const [carrinho, setCarrinho] = useState({}); // { [pratoId]: { prato, quantidade } }
 
+  const [cliente, setCliente] = useState({ nome: '', whatsapp: '' }); // contato informado (opcional)
+  const [whatsappCampo, setWhatsappCampo] = useState('');
   const [pratoEscolhendo, setPratoEscolhendo] = useState(null);
   const [pratoVendo, setPratoVendo] = useState(null); // foto ampliada
   const [avisoRetirados, setAvisoRetirados] = useState('');
@@ -76,6 +78,18 @@ function PaginaCliente() {
         if (logoUrl) definirFavicon(logoUrl);
       })
       .catch(() => {});
+  }, []);
+
+  // Lembra o nome e o WhatsApp neste aparelho (para não digitar de novo no próximo pedido)
+  useEffect(() => {
+    try {
+      const salvo = JSON.parse(localStorage.getItem('csf_cliente') || 'null');
+      if (salvo && typeof salvo === 'object') {
+        setCliente({ nome: String(salvo.nome || ''), whatsapp: String(salvo.whatsapp || '') });
+        setNomeComanda(String(salvo.nome || ''));
+        setWhatsappCampo(String(salvo.whatsapp || ''));
+      }
+    } catch {}
   }, []);
 
   // Ao abrir o QR da mesa: se já há comandas abertas nela, vai direto para elas.
@@ -104,6 +118,35 @@ function PaginaCliente() {
   }
 
   function escolherLevar() {
+    setTela('levar');
+  }
+
+  // Valida o WhatsApp (opcional). Devolve { ok, numero } — numero = só dígitos, ou '' se deixou em branco.
+  function lerWhatsapp() {
+    const digitos = whatsappCampo.replace(/\D/g, '');
+    if (!digitos) return { ok: true, numero: '' };
+    const semPais = digitos.startsWith('55') && digitos.length >= 12 ? digitos.slice(2) : digitos;
+    if (semPais.length !== 10 && semPais.length !== 11) {
+      alert('WhatsApp inválido. Digite com DDD, por exemplo (11) 91234-5678, ou deixe em branco.');
+      return { ok: false };
+    }
+    return { ok: true, numero: semPais };
+  }
+
+  function guardarCliente(nome, numero) {
+    const novo = { nome, whatsapp: numero };
+    setCliente(novo);
+    try {
+      localStorage.setItem('csf_cliente', JSON.stringify(novo));
+    } catch {}
+  }
+
+  function confirmarLevar() {
+    const nome = nomeComanda.replace(/\s+/g, ' ').trim();
+    if (!nome) return alert('Digite seu nome para identificar o pedido.');
+    const w = lerWhatsapp();
+    if (!w.ok) return;
+    guardarCliente(nome, w.numero);
     setModo('levar');
     setMesaAtual('');
     entrarNoPedido();
@@ -116,23 +159,28 @@ function PaginaCliente() {
     setTela('detalhe');
   }
 
-  function escolherComandaJunta() {
-    setModo('local');
-    setMesaAtual(mesaUrl);
-    if (mesaUrl) lembrarComanda(mesaUrl, mesaUrl);
-    entrarNoPedido();
-  }
-
-  function confirmarComandaSeparada() {
+  // Comanda junta (mesa toda) ou separada: os dois pedem nome + WhatsApp (o WhatsApp é opcional)
+  function confirmarComanda() {
+    const tipo = mostrarFormComanda; // 'junta' | 'separada'
     const nome = nomeComanda.replace(/\s+/g, ' ').trim();
     if (!nome) return alert('Digite seu nome para identificar sua comanda.');
-    const repetido = comandas.some((c) => c.tipo === 'separada' && c.nome.toLowerCase() === nome.toLowerCase());
-    if (repetido) {
-      return alert(
-        `Já existe uma comanda "${nome}" nesta mesa. Se for a sua, volte e toque no seu nome na lista; se for outra pessoa, acrescente uma inicial ou sobrenome (ex: ${nome} S.).`
-      );
+    const w = lerWhatsapp();
+    if (!w.ok) return;
+
+    let id;
+    if (tipo === 'separada') {
+      const repetido = comandas.some((c) => c.tipo === 'separada' && c.nome.toLowerCase() === nome.toLowerCase());
+      if (repetido) {
+        return alert(
+          `Já existe uma comanda "${nome}" nesta mesa. Se for a sua, volte e toque no seu nome na lista; se for outra pessoa, acrescente uma inicial ou sobrenome (ex: ${nome} S.).`
+        );
+      }
+      id = mesaUrl ? `${mesaUrl} - ${nome}` : nome;
+    } else {
+      id = mesaUrl;
     }
-    const id = mesaUrl ? `${mesaUrl} - ${nome}` : nome;
+
+    guardarCliente(nome, w.numero);
     setModo('local');
     setMesaAtual(id);
     if (mesaUrl) lembrarComanda(mesaUrl, id);
@@ -340,37 +388,50 @@ function PaginaCliente() {
         />
       )}
 
+      {tela === 'levar' && (
+        <div className="tela-escolha">
+          <h1>Comida para levar</h1>
+          <FormContato
+            titulo="Para quem é o pedido?"
+            nome={nomeComanda}
+            setNome={setNomeComanda}
+            whatsapp={whatsappCampo}
+            setWhatsapp={setWhatsappCampo}
+            onContinuar={confirmarLevar}
+          />
+          <button
+            className="opcao-escolha"
+            style={{ background: 'transparent', boxShadow: 'none', color: '#fff', fontWeight: 400 }}
+            onClick={() => setTela('escolha')}
+            type="button"
+          >
+            ← Voltar
+          </button>
+        </div>
+      )}
+
       {tela === 'comanda' && (
         <div className="tela-escolha">
           <h1>Comer no local</h1>
           <p>A conta da mesa vai ser junta ou separada?</p>
-          <button className="opcao-escolha" onClick={escolherComandaJunta} type="button">
+          <button className="opcao-escolha" onClick={() => setMostrarFormComanda('junta')} type="button">
             <span className="icone">🧾</span>
             <span>Comanda junta (mesa toda)</span>
           </button>
-          <button className="opcao-escolha" onClick={() => setMostrarFormComanda(true)} type="button">
+          <button className="opcao-escolha" onClick={() => setMostrarFormComanda('separada')} type="button">
             <span className="icone">🙋</span>
             <span>Comanda separada (só a minha)</span>
           </button>
 
           {mostrarFormComanda && (
-            <div style={{ marginTop: 10, width: '100%', maxWidth: 320 }}>
-              <input
-                type="text"
-                placeholder="Seu nome"
-                value={nomeComanda}
-                onChange={(e) => setNomeComanda(e.target.value)}
-                style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', fontSize: '1rem' }}
-              />
-              <button
-                className="opcao-escolha"
-                style={{ marginTop: 10, justifyContent: 'center' }}
-                onClick={confirmarComandaSeparada}
-                type="button"
-              >
-                Continuar
-              </button>
-            </div>
+            <FormContato
+              titulo={mostrarFormComanda === 'junta' ? 'Quem está abrindo a comanda da mesa?' : 'Sua comanda'}
+              nome={nomeComanda}
+              setNome={setNomeComanda}
+              whatsapp={whatsappCampo}
+              setWhatsapp={setWhatsappCampo}
+              onContinuar={confirmarComanda}
+            />
           )}
 
           <button
@@ -378,7 +439,6 @@ function PaginaCliente() {
             style={{ background: 'transparent', boxShadow: 'none', color: '#fff', fontWeight: 400 }}
             onClick={() => {
               setMostrarFormComanda(false);
-              setNomeComanda('');
               setTela(comandas.length ? 'mesa' : 'escolha');
             }}
             type="button"
@@ -580,6 +640,7 @@ function PaginaCliente() {
               total={totalCarrinho}
               modo={modo}
               mesaAtual={mesaAtual}
+              cliente={cliente}
               onFechar={() => setModalRevisao(false)}
               onSucesso={() => {
                 setModalRevisao(false);
@@ -592,6 +653,32 @@ function PaginaCliente() {
         </div>
       )}
     </>
+  );
+}
+
+// Nome + WhatsApp (o WhatsApp é opcional). O aviso explica para que o número é usado.
+function FormContato({ titulo, nome, setNome, whatsapp, setWhatsapp, onContinuar }) {
+  const campo = { width: '100%', padding: 12, borderRadius: 10, border: 'none', fontSize: '1rem', marginTop: 8 };
+  return (
+    <div style={{ marginTop: 10, width: '100%', maxWidth: 320 }}>
+      {titulo && <div style={{ color: '#fff', fontWeight: 600 }}>{titulo}</div>}
+      <input type="text" placeholder="Seu nome" value={nome} onChange={(e) => setNome(e.target.value)} style={campo} />
+      <input
+        type="tel"
+        inputMode="tel"
+        placeholder="Seu WhatsApp com DDD (opcional)"
+        value={whatsapp}
+        onChange={(e) => setWhatsapp(e.target.value)}
+        style={campo}
+      />
+      <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.78rem', marginTop: 6, lineHeight: 1.35 }}>
+        Se informar o WhatsApp, a casa manda uma mensagem de agradecimento depois que você pagar. Só usamos para isso e não
+        compartilhamos. Pode deixar em branco.
+      </div>
+      <button className="opcao-escolha" style={{ marginTop: 10, justifyContent: 'center' }} onClick={onContinuar} type="button">
+        Continuar
+      </button>
+    </div>
   );
 }
 
@@ -707,9 +794,9 @@ function ModalOpcoes({ prato, onFechar, onAdicionar, limiteQuantidade }) {
   );
 }
 
-function ModalRevisarPedido({ itens, total, modo, mesaAtual, onFechar, onSucesso, onAlterar, onObservacao }) {
+function ModalRevisarPedido({ itens, total, modo, mesaAtual, cliente, onFechar, onSucesso, onAlterar, onObservacao }) {
   const paraLevar = modo === 'levar';
-  const [valorCampo, setValorCampo] = useState(paraLevar ? '' : mesaAtual);
+  const [valorCampo, setValorCampo] = useState(paraLevar ? cliente?.nome || '' : mesaAtual);
   const [observacao, setObservacao] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
@@ -731,6 +818,8 @@ function ModalRevisarPedido({ itens, total, modo, mesaAtual, onFechar, onSucesso
         body: JSON.stringify({
           mesa: mesaValor,
           observacao,
+          clienteNome: cliente?.nome || '',
+          clienteWhatsapp: cliente?.whatsapp || '',
           itens: itens.map((i) => ({
             pratoId: i.prato.id,
             quantidade: i.quantidade,

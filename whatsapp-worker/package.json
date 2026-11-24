@@ -1,0 +1,18 @@
+{
+  "name": "whatsapp-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Envia no WhatsApp as mensagens de agradecimento do sistema do restaurante",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "6.7.24",
+    "pino": "^9.5.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

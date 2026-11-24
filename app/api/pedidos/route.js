@@ -8,9 +8,9 @@ export async function POST(request) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { mesa, observacao, itens } = body || {};
+  const { mesa, observacao, itens, clienteNome, clienteWhatsapp } = body || {};
 
-  const r = await criarPedido({ mesa, observacao, itens });
+  const r = await criarPedido({ mesa, observacao, itens, clienteNome, clienteWhatsapp });
   if (r.erro) return Response.json({ erro: r.erro }, { status: r.status });
   return Response.json({ pedidoId: r.pedidoId, total: r.total, criadoEm: r.criadoEm }, { status: 201 });
 }

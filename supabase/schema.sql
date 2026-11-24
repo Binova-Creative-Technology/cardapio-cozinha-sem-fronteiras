@@ -312,6 +312,31 @@ grant execute on function csf_baixar_item(bigint, integer, boolean) to service_r
 grant execute on function csf_devolver_item(bigint, integer) to service_role;
 
 -- ---------------------------------------------------------------------------
+-- WhatsApp de agradecimento
+--  - csf_pedidos.cliente_nome / cliente_whatsapp: contato que o cliente informou (opcional)
+--  - csf_whatsapp_mensagens: fila de mensagens; o programa "whatsapp-worker" (no computador
+--    do restaurante) busca as pendentes e envia. No máximo 1 por conta fechada.
+-- ---------------------------------------------------------------------------
+alter table csf_pedidos add column if not exists cliente_nome text default '';
+alter table csf_pedidos add column if not exists cliente_whatsapp text default '';
+
+create table if not exists csf_whatsapp_mensagens (
+  id bigint generated always as identity primary key,
+  fechamento_id bigint,
+  nome text default '',
+  telefone text not null,
+  texto text not null,
+  status text not null default 'pendente',
+  tentativas integer not null default 0,
+  erro text,
+  criado_em timestamptz not null default now(),
+  enviado_em timestamptz
+);
+create unique index if not exists uq_csf_wpp_fechamento on csf_whatsapp_mensagens (fechamento_id) where fechamento_id is not null;
+create index if not exists idx_csf_wpp_status on csf_whatsapp_mensagens (status, criado_em);
+alter table csf_whatsapp_mensagens enable row level security;
+
+-- ---------------------------------------------------------------------------
 -- Storage (fotos dos pratos e logo do restaurante)
 --
 -- Cria o bucket "csf-uploads" (nome específico deste projeto, para não
