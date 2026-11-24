@@ -690,6 +690,32 @@ function AbaPedidos({
     });
   }
 
+  // Conta (fechamento) que encerrou o pedido, ou null se a comanda ainda está aberta.
+  function fechamentoDe(p) {
+    const criado = new Date(p.criado_em).getTime();
+    const achados = concluidos
+      .filter((f) => {
+        const t = new Date(f.criado_em).getTime();
+        return f.mesa === p.mesa && t >= criado && t - criado < 18 * 3600000;
+      })
+      .sort((a, b) => new Date(a.criado_em) - new Date(b.criado_em));
+    return achados.length ? achados[0].id : null;
+  }
+
+  // Um cliente que pede várias vezes aparece como UMA comanda (mesa + dia + conta), não como vários pedidos.
+  const comandas = (() => {
+    const mapa = new Map();
+    for (const p of pedidos) {
+      // (a lista vem do pedido mais novo para o mais antigo)
+      const dia = diaBR(p.criado_em);
+      const fid = p.mesa ? fechamentoDe(p) : null;
+      const chave = p.mesa ? `${dia}|${p.mesa}|${fid ?? 'aberta'}` : `${dia}|sem-mesa|${p.id}`;
+      if (!mapa.has(chave)) mapa.set(chave, { chave, dia, mesa: p.mesa, fechamentoId: fid, pedidos: [] });
+      mapa.get(chave).pedidos.push(p);
+    }
+    return [...mapa.values()].map((g) => ({ ...g, pedidos: [...g.pedidos].reverse() }));
+  })();
+
   // Tira 1 unidade ('menos') ou o prato todo ('tirar') de um pedido; o estoque volta e os valores se refazem.
   async function ajustarItem(item, acao, pedido) {
     if (acao === 'tirar' && !confirm(`Tirar "${item.nome_prato.trim()}" (${item.quantidade}x) deste pedido?`)) return;
@@ -790,52 +816,55 @@ function AbaPedidos({
           <thead>
             <tr>
               <th>Hora</th>
-              <th>Mesa</th>
-              <th>Itens</th>
+              <th>Mesa / comanda</th>
+              <th>Pedidos</th>
               <th>Total</th>
               <th>Status</th>
-              <th>Cozinha</th>
               <th>Conta</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
-            {pedidos.length === 0 && (
+            {comandas.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', color: '#888' }}>
+                <td colSpan={6} style={{ textAlign: 'center', color: '#888' }}>
                   Nenhum pedido neste mês.
                 </td>
               </tr>
             )}
-            {pedidos.map((p, idxPedido) => {
-              const hora = new Date(p.criado_em).toLocaleTimeString('pt-BR', {
-                hour: '2-digit',
-                minute: '2-digit',
-                timeZone: 'America/Sao_Paulo',
-              });
-              const dia = diaBR(p.criado_em);
-              const novoDia = idxPedido === 0 || diaBR(pedidos[idxPedido - 1].criado_em) !== dia;
-              const doDia = pedidos.filter((x) => diaBR(x.criado_em) === dia);
-              const validosDoDia = doDia.filter((x) => x.status !== 'cancelado');
-              const totalDoDia = validosDoDia.reduce((soma, x) => soma + Number(x.total), 0);
+            {comandas.map((g, idxGrupo) => {
+              const horaDe = (iso) =>
+                new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+              const validos = g.pedidos.filter((x) => x.status !== 'cancelado');
+              const totalGrupo = validos.reduce((soma, x) => soma + Number(x.total), 0);
+              const totalItens = validos.reduce((soma, x) => soma + x.itens.reduce((s, i) => s + i.quantidade, 0), 0);
+              const fechadoGrupo = g.fechamentoId !== null && validos.length > 0;
+              const primeiro = g.pedidos[0];
+              const ultimo = g.pedidos[g.pedidos.length - 1];
+              const novoDia = idxGrupo === 0 || comandas[idxGrupo - 1].dia !== g.dia;
               const hojeBR = diaBR(new Date().toISOString());
-              const aberto = expandidoId === p.id;
-              const totalItens = p.itens.reduce((soma, i) => soma + i.quantidade, 0);
-              const fechado = p.status !== 'cancelado' && contaFechada(p);
-              // pedido novo pisca até a equipe mudar o status; se a conta já foi fechada, não pisca
-              const piscando = p.status === 'recebido' && !fechado;
+              const doDia = comandas.filter((x) => x.dia === g.dia);
+              const totalDoDia = doDia.reduce(
+                (soma, c) => soma + c.pedidos.filter((x) => x.status !== 'cancelado').reduce((s, x) => s + Number(x.total), 0),
+                0,
+              );
+              const comandasDoDia = doDia.filter((c) => c.pedidos.some((x) => x.status !== 'cancelado')).length;
+              const aberto = expandidoId === g.chave;
+              const piscando = !fechadoGrupo && g.pedidos.some((x) => x.status === 'recebido');
+              const resumoStatus = {};
+              for (const x of validos) resumoStatus[x.status] = (resumoStatus[x.status] || 0) + 1;
+
               return (
-                <Fragment key={p.id}>
+                <Fragment key={g.chave}>
                   {novoDia && (
                     <tr className="linha-dia">
-                      <td colSpan={8}>
+                      <td colSpan={6}>
                         <strong>
-                          {dia === hojeBR ? 'Hoje — ' : ''}
-                          {formatarDiaLabel(dia)}
+                          {g.dia === hojeBR ? 'Hoje — ' : ''}
+                          {formatarDiaLabel(g.dia)}
                         </strong>
                         <span>
                           {' '}
-                          · {validosDoDia.length} {validosDoDia.length === 1 ? 'pedido' : 'pedidos'} ·{' '}
+                          · {comandasDoDia} {comandasDoDia === 1 ? 'comanda' : 'comandas'} ·{' '}
                           {mostrarVendas ? formatarMoeda(totalDoDia) : tampado}
                         </span>
                       </td>
@@ -843,107 +872,137 @@ function AbaPedidos({
                   )}
                   <tr
                     className={piscando ? 'pedido-novo' : undefined}
-                    onClick={() => setExpandidoId(aberto ? null : p.id)}
+                    onClick={() => setExpandidoId(aberto ? null : g.chave)}
                     style={{ cursor: 'pointer', background: aberto && !piscando ? '#faf7f2' : undefined }}
                   >
                     <td>
                       {piscando && <span className="selo-novo">NOVO</span>}
-                      {hora}
+                      {horaDe(primeiro.criado_em)}
+                      {g.pedidos.length > 1 && horaDe(ultimo.criado_em) !== horaDe(primeiro.criado_em) && (
+                        <span style={{ opacity: 0.7 }}> → {horaDe(ultimo.criado_em)}</span>
+                      )}
                     </td>
-                    <td>{p.mesa || '-'}</td>
+                    <td>{g.mesa || '-'}</td>
                     <td>
-                      {aberto ? '▾' : '▸'} {totalItens} {totalItens === 1 ? 'item' : 'itens'}
+                      {aberto ? '▾' : '▸'} {g.pedidos.length} {g.pedidos.length === 1 ? 'pedido' : 'pedidos'} · {totalItens}{' '}
+                      {totalItens === 1 ? 'item' : 'itens'}
                       <span style={{ color: '#888' }}> — clique para ver</span>
                     </td>
-                    <td>{formatarMoeda(p.total)}</td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {fechado ? (
+                    <td>{formatarMoeda(totalGrupo)}</td>
+                    <td>
+                      {fechadoGrupo ? (
                         <strong style={{ color: '#2e7d32' }}>✔ Fechado</strong>
+                      ) : validos.length === 0 ? (
+                        <span style={{ color: '#888' }}>cancelado</span>
                       ) : (
-                        <select value={p.status} onChange={(e) => alterarStatus(p.id, e.target.value)}>
-                          {['recebido', 'em preparo', 'pronto', 'entregue', 'cancelado'].map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
+                        <span style={{ fontSize: '0.85rem' }}>
+                          {Object.entries(resumoStatus)
+                            .map(([st, n]) => (g.pedidos.length > 1 ? `${n}× ${st}` : st))
+                            .join(' · ')}
+                        </span>
                       )}
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      {p.status !== 'cancelado' && (
-                        <button className="btn-secundario" onClick={() => onImprimirCozinha(p)} type="button">
-                          Imprimir
-                        </button>
-                      )}
-                    </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {!fechado && p.status !== 'cancelado' && p.mesa && (
-                        <button className="btn-secundario" onClick={() => onFecharConta(p.mesa)} type="button">
+                      {!fechadoGrupo && validos.length > 0 && g.mesa && (
+                        <button className="btn-secundario" onClick={() => onFecharConta(g.mesa)} type="button">
                           Fechar conta
                         </button>
                       )}
                     </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <button className="btn-perigo" onClick={() => excluirPedido(p)} type="button">
-                        Excluir
-                      </button>
-                    </td>
                   </tr>
                   {aberto && (
                     <tr style={{ background: '#faf7f2' }}>
-                      <td colSpan={8}>
-                        {p.itens.map((i) => (
-                          <div
-                            key={i.id}
-                            style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '4px 0' }}
-                          >
-                            <span>
-                              <strong>{i.quantidade}x</strong> {i.nome_prato}
-                              {i.porcao ? ` (${i.porcao})` : ''}
-                              {i.opcoes && <div style={{ color: '#7a5a12', fontSize: '0.85rem' }}>{i.opcoes}</div>}
-                              {i.observacao && (
-                                <div style={{ color: '#a3352b', fontSize: '0.85rem', fontWeight: 600 }}>
-                                  Obs: {i.observacao}
-                                </div>
-                              )}
-                            </span>
-                            <span style={{ color: '#555', whiteSpace: 'nowrap' }}>
-                              {formatarMoeda(i.preco_unitario)} cada — <strong>{formatarMoeda(i.subtotal)}</strong>
-                              {!fechado && p.status !== 'cancelado' && (
-                                <>
-                                  {i.quantidade > 1 && (
-                                    <button
-                                      className="btn-secundario"
-                                      type="button"
-                                      title="Tirar 1 unidade"
-                                      style={{ marginLeft: 8 }}
-                                      onClick={() => ajustarItem(i, 'menos')}
-                                    >
-                                      −1
+                      <td colSpan={6}>
+                        {g.pedidos.map((p) => {
+                          const cancelado = p.status === 'cancelado';
+                          const novoP = p.status === 'recebido' && !fechadoGrupo;
+                          return (
+                            <div
+                              key={p.id}
+                              className={'pedido-na-comanda' + (novoP ? ' pedido-novo' : '')}
+                              style={{ opacity: cancelado ? 0.55 : 1 }}
+                            >
+                              <div className="cab-pedido">
+                                <strong>
+                                  Pedido nº {p.id} — {horaDe(p.criado_em)}
+                                </strong>
+                                <span className="acoes-pedido">
+                                  {fechadoGrupo && !cancelado ? (
+                                    <strong style={{ color: '#2e7d32' }}>✔ Fechado</strong>
+                                  ) : (
+                                    <select value={p.status} onChange={(e) => alterarStatus(p.id, e.target.value)}>
+                                      {['recebido', 'em preparo', 'pronto', 'entregue', 'cancelado'].map((s) => (
+                                        <option key={s} value={s}>
+                                          {s}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
+                                  {!cancelado && (
+                                    <button className="btn-secundario" onClick={() => onImprimirCozinha(p)} type="button">
+                                      Imprimir cozinha
                                     </button>
                                   )}
-                                  <button
-                                    className="btn-perigo"
-                                    type="button"
-                                    style={{ marginLeft: 6 }}
-                                    onClick={() => ajustarItem(i, 'tirar', p)}
-                                  >
-                                    Tirar
+                                  <button className="btn-perigo" onClick={() => excluirPedido(p)} type="button">
+                                    Excluir
                                   </button>
-                                </>
+                                </span>
+                              </div>
+                              {p.itens.map((i) => (
+                                <div
+                                  key={i.id}
+                                  style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '4px 0' }}
+                                >
+                                  <span>
+                                    <strong>{i.quantidade}x</strong> {i.nome_prato}
+                                    {i.porcao ? ` (${i.porcao})` : ''}
+                                    {i.opcoes && <div style={{ color: '#7a5a12', fontSize: '0.85rem' }}>{i.opcoes}</div>}
+                                    {i.observacao && (
+                                      <div style={{ color: '#a3352b', fontSize: '0.85rem', fontWeight: 600 }}>
+                                        Obs: {i.observacao}
+                                      </div>
+                                    )}
+                                  </span>
+                                  <span style={{ color: '#555', whiteSpace: 'nowrap' }}>
+                                    {formatarMoeda(i.preco_unitario)} cada — <strong>{formatarMoeda(i.subtotal)}</strong>
+                                    {!fechadoGrupo && !cancelado && (
+                                      <>
+                                        {i.quantidade > 1 && (
+                                          <button
+                                            className="btn-secundario"
+                                            type="button"
+                                            title="Tirar 1 unidade"
+                                            style={{ marginLeft: 8 }}
+                                            onClick={() => ajustarItem(i, 'menos')}
+                                          >
+                                            −1
+                                          </button>
+                                        )}
+                                        <button
+                                          className="btn-perigo"
+                                          type="button"
+                                          style={{ marginLeft: 6 }}
+                                          onClick={() => ajustarItem(i, 'tirar', p)}
+                                        >
+                                          Tirar
+                                        </button>
+                                      </>
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                              {p.observacao && (
+                                <div style={{ marginTop: 6, color: '#7a5a12' }}>
+                                  <strong>Observação:</strong> {p.observacao}
+                                </div>
                               )}
-                            </span>
-                          </div>
-                        ))}
-                        {p.observacao && (
-                          <div style={{ marginTop: 6, color: '#7a5a12' }}>
-                            <strong>Observação:</strong> {p.observacao}
-                          </div>
-                        )}
-                        {!fechado && p.status !== 'cancelado' && p.mesa && (
+                            </div>
+                          );
+                        })}
+                        {!fechadoGrupo && validos.length > 0 && g.mesa && (
                           <div style={{ marginTop: 8 }}>
-                            <button className="btn" type="button" onClick={() => setAdicionandoMesa(p.mesa)}>
-                              + Adicionar à comanda ({p.mesa})
+                            <button className="btn" type="button" onClick={() => setAdicionandoMesa(g.mesa)}>
+                              + Adicionar à comanda ({g.mesa})
                             </button>
                           </div>
                         )}

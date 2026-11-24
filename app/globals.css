@@ -461,6 +461,12 @@ button.btn-perigo { background: #fdecea; color: #a3352b; border: none; padding: 
 .selo-estoque.baixo { background: #fff0cc; color: #8a5a00; }
 .selo-estoque.zero { background: #fde1df; color: #b71c1c; }
 
+/* Pedidos dentro de uma comanda */
+.pedido-na-comanda { background: #fff; border: 1px solid #e5ddd0; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.pedido-na-comanda.pedido-novo { animation: piscar-pedido 1s ease-in-out infinite; }
+.pedido-na-comanda .cab-pedido { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.pedido-na-comanda .acoes-pedido { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
 /* Cabeçalho de cada dia na lista de pedidos */
 tr.linha-dia td {
   background: #a3352b;
