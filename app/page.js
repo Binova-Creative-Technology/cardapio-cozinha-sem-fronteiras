@@ -78,6 +78,7 @@ function PaginaCliente() {
   const [pratoEscolhendo, setPratoEscolhendo] = useState(null);
   const [pratoVendo, setPratoVendo] = useState(null); // foto ampliada
   const [avisoRetirados, setAvisoRetirados] = useState('');
+  const [modoReserva, setModoReserva] = useState(false); // banco fora do ar: pedido é mostrado ao atendente
   const [categoriaAtiva, setCategoriaAtiva] = useState(null); // aba do cardápio
   const [modalRevisao, setModalRevisao] = useState(false);
   const [modalFecharConta, setModalFecharConta] = useState(false);
@@ -204,12 +205,15 @@ function PaginaCliente() {
     setTela('pedido');
     fetch('/api/status')
       .then((r) => r.json())
-      .then(({ aberto }) => setLojaAberta(aberto))
+      .then(({ aberto }) => setLojaAberta(aberto !== false))
       .catch(() => {});
     setCarregandoCardapio(true);
     fetch('/api/cardapio')
-      .then((r) => r.json())
-      .then((data) => setCardapio(data))
+      .then((r) => {
+        setModoReserva(r.headers.get('x-modo-reserva') === '1');
+        return r.json();
+      })
+      .then((data) => setCardapio(Array.isArray(data) ? data : null))
       .catch(() => setCardapio(null))
       .finally(() => setCarregandoCardapio(false));
   }
@@ -221,7 +225,10 @@ function PaginaCliente() {
     let ativo = true;
     const atualizar = () => {
       fetch('/api/cardapio')
-        .then((r) => r.json())
+        .then((r) => {
+          if (ativo) setModoReserva(r.headers.get('x-modo-reserva') === '1');
+          return r.json();
+        })
         .then((data) => {
           if (!ativo || !Array.isArray(data)) return;
           setCardapio(data);
@@ -539,7 +546,7 @@ function PaginaCliente() {
                 </div>
               </div>
             </div>
-            {modo === 'local' && mesaAtual && (
+            {modo === 'local' && mesaAtual && !modoReserva && (
               <div className="appbar-acoes">
                 <button className="btn sm on-wine" onClick={() => setTela('detalhe')} type="button">
                   <I n="receipt" s={16} />
@@ -576,6 +583,13 @@ function PaginaCliente() {
             <div className="aviso-faixa">
               <I n="info" s={18} />
               O restaurante não está aceitando pedidos no momento. Fale com a equipe.
+            </div>
+          )}
+
+          {modoReserva && (
+            <div className="aviso-faixa">
+              <I n="info" s={18} />
+              <span>Escolha seu pedido aqui e mostre a tela ao atendente. O envio automático está fora do ar no momento.</span>
             </div>
           )}
 
@@ -759,6 +773,7 @@ function PaginaCliente() {
               modo={modo}
               mesaAtual={mesaAtual}
               cliente={cliente}
+              modoReserva={modoReserva}
               onFechar={() => setModalRevisao(false)}
               onSucesso={() => {
                 setModalRevisao(false);
@@ -953,7 +968,8 @@ function ModalOpcoes({ prato, onFechar, onAdicionar, limiteQuantidade }) {
   );
 }
 
-function ModalRevisarPedido({ itens, total, modo, mesaAtual, cliente, onFechar, onSucesso, onAlterar, onObservacao }) {
+function ModalRevisarPedido({ itens, total, modo, mesaAtual, cliente, modoReserva, onFechar, onSucesso, onAlterar, onObservacao }) {
+  const [mostrando, setMostrando] = useState(false); // modo reserva: tela para o atendente
   const paraLevar = modo === 'levar';
   const [valorCampo, setValorCampo] = useState(paraLevar ? cliente?.nome || '' : mesaAtual);
   const [observacao, setObservacao] = useState('');
@@ -964,6 +980,10 @@ function ModalRevisarPedido({ itens, total, modo, mesaAtual, cliente, onFechar, 
   async function enviarPedido() {
     if (paraLevar && !valorCampo.trim()) {
       setErro('Informe seu nome para identificar o pedido.');
+      return;
+    }
+    if (modoReserva) {
+      setMostrando(true); // nada é enviado: o cliente mostra a tela
       return;
     }
     setEnviando(true);
@@ -995,6 +1015,45 @@ function ModalRevisarPedido({ itens, total, modo, mesaAtual, cliente, onFechar, 
     } finally {
       setEnviando(false);
     }
+  }
+
+  if (mostrando) {
+    return (
+      <div className="overlay">
+        <div className="modal" role="dialog" aria-label="Mostre ao atendente">
+          <div className="modal-cab">
+            <h3>Mostre ao atendente</h3>
+          </div>
+          <div className="modal-corpo">
+            <div style={{ fontSize: 26, fontWeight: 800, textAlign: 'center' }}>
+              {paraLevar ? `Para levar: ${valorCampo}` : valorCampo ? `Mesa ${valorCampo}` : cliente?.nome || 'Pedido'}
+            </div>
+            {itens.map((i) => (
+              <div key={i.chave} style={{ borderTop: '1px solid #ddd', padding: '10px 0', fontSize: 18 }}>
+                <b>
+                  {i.quantidade}x {i.prato.nome}
+                </b>
+                {i.opcoes.length > 0 && <div style={{ fontSize: 15 }}>{i.opcoes.map((o) => o.nome).join(', ')}</div>}
+                {i.observacao && <div style={{ fontSize: 15 }}>Obs: {i.observacao}</div>}
+              </div>
+            ))}
+            {observacao && <div style={{ borderTop: '1px solid #ddd', padding: '10px 0' }}>Obs: {observacao}</div>}
+            <div style={{ borderTop: '2px solid #000', paddingTop: 10, fontSize: 22, fontWeight: 800 }}>
+              Total: {formatarMoeda(total)}
+            </div>
+            <p className="erro">Atenção: este pedido NÃO foi enviado. Chame o atendente.</p>
+          </div>
+          <div className="acoes">
+            <button className="btn line" type="button" onClick={() => setMostrando(false)}>
+              Voltar
+            </button>
+            <button className="btn" type="button" style={{ flex: 2 }} onClick={onSucesso}>
+              Já mostrei
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (sucesso) {
@@ -1095,7 +1154,7 @@ function ModalRevisarPedido({ itens, total, modo, mesaAtual, cliente, onFechar, 
           </button>
           <button className="btn" type="button" style={{ flex: 2 }} disabled={enviando || itens.length === 0} onClick={enviarPedido}>
             <I n="send" />
-            {enviando ? 'Enviando...' : 'Enviar pedido'}
+            {enviando ? 'Enviando...' : modoReserva ? 'Mostrar ao atendente' : 'Enviar pedido'}
           </button>
         </div>
       </div>
