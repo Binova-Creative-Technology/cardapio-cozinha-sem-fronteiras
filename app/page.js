@@ -27,6 +27,19 @@ const STATUS_ROTULO = {
   cancelado: 'Cancelado',
 };
 
+const STATUS_SELO = {
+  recebido: ['brand', 'check'],
+  'em preparo': ['warn', 'chef'],
+  pronto: ['ok', 'utensils'],
+  entregue: ['info', 'ok'],
+  cancelado: ['neutral', 'x'],
+};
+
+// Ícone de traço único (desenhado no globals.css)
+function I({ n, s, flip }) {
+  return <span className={'i i-' + n + (flip ? ' flip' : '')} style={s ? { '--s': s + 'px' } : undefined} aria-hidden="true" />;
+}
+
 function lembrarComanda(mesa, id) {
   try {
     localStorage.setItem('csf_comanda_' + mesa, id);
@@ -295,6 +308,7 @@ function PaginaCliente() {
 
   const itensCarrinho = Object.values(carrinho).filter((i) => i.quantidade > 0);
   const totalCarrinho = itensCarrinho.reduce((acc, i) => acc + i.precoUnit * i.quantidade, 0);
+  const unidadesCarrinho = itensCarrinho.reduce((acc, i) => acc + i.quantidade, 0);
   // Quantas unidades ainda dá para pedir deste prato com estas opções (considera o que já está no carrinho)
   const limiteQuantidade = (prato, opcoesIds) => {
     let limite = 99;
@@ -324,56 +338,95 @@ function PaginaCliente() {
 
   return (
     <>
+      {/* Filtro que deixa só o dourado da logo (o fundo vermelho do arquivo fica transparente) */}
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+        <filter id="so-dourado" colorInterpolationFilters="sRGB">
+          <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 4.2 0 0 -0.25" />
+        </filter>
+      </svg>
+
       {tela === 'escolha' && (
-        <div className="tela-escolha">
-          {config.logoUrl && <img src={config.logoUrl} className="logo-topo" alt="Logo" />}
-          <h1>{config.nomeLoja}</h1>
-          <p>Como você quer continuar?</p>
-          <button className="opcao-escolha" onClick={escolherLocal} type="button">
-            <span className="icone">🍽️</span>
-            <span>Comer no local</span>
-          </button>
-          <button className="opcao-escolha" onClick={escolherLevar} type="button">
-            <span className="icone">🥡</span>
-            <span>Comida para levar</span>
-          </button>
-          <button className="opcao-escolha" onClick={() => window.open(SITE_RESTAURANTE, '_blank')} type="button">
-            <span className="icone">🌐</span>
-            <span>Nosso site</span>
-          </button>
+        <div className="wine tela-entrada-fundo">
+          <div className="tela-entrada">
+            <div className="rise" style={{ marginTop: 'auto' }}>
+              {config.logoUrl && (
+                <div className="logo-entrada">
+                  <img src={config.logoUrl} alt={config.nomeLoja} />
+                </div>
+              )}
+              {mesaUrl ? (
+                <>
+                  <p className="entrada-sub">Você está na</p>
+                  <h1 className="mesa-num">Mesa {mesaUrl}</h1>
+                </>
+              ) : (
+                <h1 className="entrada-nome">{config.nomeLoja}</h1>
+              )}
+              <p className="entrada-pergunta">Como você quer pedir?</p>
+            </div>
+            <div className="entrada-opcoes stagger">
+              <button className="choice" onClick={escolherLocal} type="button">
+                <span className="tile"><I n="utensils" s={26} /></span>
+                <span className="choice-txt"><b>Comer aqui na mesa</b><small>O pedido chega até você</small></span>
+                <I n="chev-r" />
+              </button>
+              <button className="choice" onClick={escolherLevar} type="button">
+                <span className="tile"><I n="bag" s={26} /></span>
+                <span className="choice-txt"><b>Retirar no balcão</b><small>Para levar quando ficar pronto</small></span>
+                <I n="chev-r" />
+              </button>
+              <button className="link-site" onClick={() => window.open(SITE_RESTAURANTE, '_blank')} type="button">
+                <I n="globe" s={18} />
+                Conheça nosso site
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {tela === 'carregando' && <div className="vazio">Carregando...</div>}
 
       {tela === 'mesa' && (
-        <div className="tela-escolha">
-          <h1>Mesa {mesaUrl}</h1>
-          <p>Comandas abertas — toque na sua</p>
-          {comandas.map((c) => (
-            <button className="opcao-escolha" key={c.id} onClick={() => abrirComanda(c.id)} type="button">
-              <span className="icone">{c.tipo === 'junta' ? '🧾' : '🙋'}</span>
-              <span>
-                {c.tipo === 'junta' ? 'Conta da mesa (junta)' : c.nome}
-                <small style={{ display: 'block', fontWeight: 400, color: '#777' }}>
-                  {c.pedidos} {c.pedidos === 1 ? 'pedido' : 'pedidos'}
-                  {c.pendente ? ' · conta solicitada' : ''}
-                </small>
-              </span>
+        <div className="tela">
+          <div className="wine topo-vinho">
+            <div className="topo-linha">
+              <button className="icon-btn on-wine" onClick={() => setTela('escolha')} type="button" aria-label="Voltar ao início">
+                <I n="back" />
+              </button>
+              {config.logoUrl && <img src={config.logoUrl} className="marca-mini" alt="" />}
+            </div>
+            <div className="rise">
+              <h1 className="mesa-titulo">Mesa {mesaUrl}</h1>
+              <p>Comandas abertas. Toque na sua.</p>
+            </div>
+          </div>
+          <div className="lista-comandas stagger">
+            {comandas.map((c) => (
+              <button className="cmd-card" key={c.id} onClick={() => abrirComanda(c.id)} type="button">
+                <span className="av">{c.tipo === 'junta' ? <I n="users" s={22} /> : c.nome.trim().charAt(0).toUpperCase()}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <b>{c.tipo === 'junta' ? 'Conta da mesa (junta)' : c.nome}</b>
+                  <span className="cmd-meta">
+                    <span className="muted">
+                      {c.pedidos} {c.pedidos === 1 ? 'pedido' : 'pedidos'}
+                    </span>
+                    {c.pendente && (
+                      <span className="tag warn"><I n="concierge" />Conta solicitada</span>
+                    )}
+                  </span>
+                </span>
+                <I n="chev-r" />
+              </button>
+            ))}
+            <button className="nova-comanda" onClick={() => setTela('comanda')} type="button">
+              <I n="plus" />
+              Nova comanda
             </button>
-          ))}
-          <button className="opcao-escolha" onClick={() => setTela('comanda')} type="button">
-            <span className="icone">➕</span>
-            <span>Nova comanda</span>
-          </button>
-          <button
-            className="opcao-escolha"
-            style={{ background: 'transparent', boxShadow: 'none', color: '#fff', fontWeight: 400 }}
-            onClick={() => setTela('escolha')}
-            type="button"
-          >
-            ← Voltar ao início
-          </button>
+            <button className="link-voltar" onClick={() => setTela('escolha')} type="button">
+              <I n="back" s={18} />
+              Voltar ao início
+            </button>
+          </div>
         </div>
       )}
 
@@ -389,92 +442,119 @@ function PaginaCliente() {
       )}
 
       {tela === 'levar' && (
-        <div className="tela-escolha">
-          <h1>Comida para levar</h1>
-          <FormContato
-            titulo="Para quem é o pedido?"
-            nome={nomeComanda}
-            setNome={setNomeComanda}
-            whatsapp={whatsappCampo}
-            setWhatsapp={setWhatsappCampo}
-            onContinuar={confirmarLevar}
-          />
-          <button
-            className="opcao-escolha"
-            style={{ background: 'transparent', boxShadow: 'none', color: '#fff', fontWeight: 400 }}
-            onClick={() => setTela('escolha')}
-            type="button"
-          >
-            ← Voltar
-          </button>
-        </div>
-      )}
-
-      {tela === 'comanda' && (
-        <div className="tela-escolha">
-          <h1>Comer no local</h1>
-          <p>A conta da mesa vai ser junta ou separada?</p>
-          <button className="opcao-escolha" onClick={() => setMostrarFormComanda('junta')} type="button">
-            <span className="icone">🧾</span>
-            <span>Comanda junta (mesa toda)</span>
-          </button>
-          <button className="opcao-escolha" onClick={() => setMostrarFormComanda('separada')} type="button">
-            <span className="icone">🙋</span>
-            <span>Comanda separada (só a minha)</span>
-          </button>
-
-          {mostrarFormComanda && (
+        <div className="tela">
+          <div className="wine topo-levar">
+            <button className="icon-btn on-wine" onClick={() => setTela('escolha')} type="button" aria-label="Voltar">
+              <I n="back" />
+            </button>
+            <div className="rise">
+              <span className="selo-icone"><I n="bag" s={28} /></span>
+              <h1>Comida para levar</h1>
+            </div>
+          </div>
+          <div className="conteudo">
             <FormContato
-              titulo={mostrarFormComanda === 'junta' ? 'Quem está abrindo a comanda da mesa?' : 'Sua comanda'}
+              titulo="Para quem é o pedido?"
               nome={nomeComanda}
               setNome={setNomeComanda}
               whatsapp={whatsappCampo}
               setWhatsapp={setWhatsappCampo}
-              onContinuar={confirmarComanda}
+              onContinuar={confirmarLevar}
             />
-          )}
+          </div>
+        </div>
+      )}
 
-          <button
-            className="opcao-escolha"
-            style={{ background: 'transparent', boxShadow: 'none', color: '#fff', fontWeight: 400 }}
-            onClick={() => {
-              setMostrarFormComanda(false);
-              setTela(comandas.length ? 'mesa' : 'escolha');
-            }}
-            type="button"
-          >
-            ← Voltar
-          </button>
+      {tela === 'comanda' && (
+        <div className="tela">
+          <div className="barra-simples">
+            <button
+              className="icon-btn"
+              onClick={() => {
+                setMostrarFormComanda(false);
+                setTela(comandas.length ? 'mesa' : 'escolha');
+              }}
+              type="button"
+              aria-label="Voltar"
+            >
+              <I n="back" />
+            </button>
+            {mesaUrl && <span className="tag brand"><I n="utensils" />Mesa {mesaUrl}</span>}
+          </div>
+          <div className="conteudo">
+            <div className="rise">
+              <h1>Comer no local</h1>
+              <p className="muted" style={{ marginTop: 6 }}>A conta da mesa vai ser junta ou separada?</p>
+            </div>
+            <div className="tipos stagger">
+              <button
+                className={'kind' + (mostrarFormComanda === 'junta' ? ' on' : '')}
+                onClick={() => setMostrarFormComanda('junta')}
+                type="button"
+              >
+                {mostrarFormComanda === 'junta' && <span className="tick"><I n="check" s={13} /></span>}
+                <span className="tile"><I n="users" s={22} /></span>
+                <b>Comanda junta</b>
+                <small>Mesa toda</small>
+              </button>
+              <button
+                className={'kind' + (mostrarFormComanda === 'separada' ? ' on' : '')}
+                onClick={() => setMostrarFormComanda('separada')}
+                type="button"
+              >
+                {mostrarFormComanda === 'separada' && <span className="tick"><I n="check" s={13} /></span>}
+                <span className="tile"><I n="user" s={22} /></span>
+                <b>Comanda separada</b>
+                <small>Só a minha</small>
+              </button>
+            </div>
+
+            {mostrarFormComanda && (
+              <FormContato
+                titulo={mostrarFormComanda === 'junta' ? 'Quem está abrindo a comanda da mesa?' : 'Sua comanda'}
+                nome={nomeComanda}
+                setNome={setNomeComanda}
+                whatsapp={whatsappCampo}
+                setWhatsapp={setWhatsappCampo}
+                onContinuar={confirmarComanda}
+              />
+            )}
+          </div>
         </div>
       )}
 
       {tela === 'pedido' && (
         <div>
-          <header className="topo">
-            <div className="topo-linha">
-              <div className="topo-marca">
-                {config.logoUrl && <img src={config.logoUrl} className="logo-topo" alt="Logo" />}
-                <h1>{config.nomeLoja}</h1>
-              </div>
-              {modo === 'local' && mesaAtual && (
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn-fechar-conta" onClick={() => setTela('detalhe')} type="button">
-                    Minha conta
-                  </button>
-                  <button className="btn-fechar-conta" onClick={() => setModalFecharConta(true)} type="button">
-                    Fechar conta
-                  </button>
+          <header className="appbar wine">
+            <div className="appbar-row">
+              {config.logoUrl && <img src={config.logoUrl} className="brand-mark" alt="" />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="ttl">{config.nomeLoja}</div>
+                <div className="sub">
+                  <I n={modo === 'levar' ? 'bag' : 'utensils'} s={13} />
+                  {mesaLabel}
                 </div>
-              )}
+              </div>
             </div>
-            <div className="mesa">{mesaLabel}</div>
-            {Array.isArray(cardapioVisivel) && cardapioVisivel.length > 0 && (
-              <nav className="abas-cardapio">
+            {modo === 'local' && mesaAtual && (
+              <div className="appbar-acoes">
+                <button className="btn sm on-wine" onClick={() => setTela('detalhe')} type="button">
+                  <I n="receipt" s={16} />
+                  Minha conta
+                </button>
+                <button className="btn sm on-wine" onClick={() => setModalFecharConta(true)} type="button">
+                  <I n="wallet" s={16} />
+                  Fechar conta
+                </button>
+              </div>
+            )}
+            {Array.isArray(cardapioVisivel) && cardapioVisivel.length > 0 ? (
+              <nav className="chips" aria-label="Categorias">
                 {cardapioVisivel.map((cat) => (
                   <button
                     key={cat.id}
                     type="button"
-                    className={cat.id === categoriaAtual?.id ? 'ativa' : ''}
+                    className={'chip' + (cat.id === categoriaAtual?.id ? ' on' : '')}
                     onClick={() => {
                       setCategoriaAtiva(cat.id);
                       window.scrollTo({ top: 0 });
@@ -484,20 +564,28 @@ function PaginaCliente() {
                   </button>
                 ))}
               </nav>
+            ) : (
+              <div className="appbar-fim" />
             )}
           </header>
 
           {!lojaAberta && (
-            <div className="aviso-fechado">O restaurante não está aceitando pedidos no momento. Fale com a equipe.</div>
-          )}
-
-          {avisoRetirados && (
-            <div className="aviso-fechado" onClick={() => setAvisoRetirados('')} style={{ cursor: 'pointer' }}>
-              {avisoRetirados} <u>Fechar</u>
+            <div className="aviso-faixa">
+              <I n="info" s={18} />
+              O restaurante não está aceitando pedidos no momento. Fale com a equipe.
             </div>
           )}
 
-          <main>
+          {avisoRetirados && (
+            <button className="aviso-faixa" onClick={() => setAvisoRetirados('')} type="button">
+              <I n="alert" s={18} />
+              <span>
+                {avisoRetirados} <u>Fechar</u>
+              </span>
+            </button>
+          )}
+
+          <main className="cardapio-main">
             {carregandoCardapio && <div className="vazio">Carregando cardápio...</div>}
             {!carregandoCardapio && cardapio === null && (
               <div className="vazio">Não foi possível carregar o cardápio. Verifique sua conexão.</div>
@@ -508,73 +596,99 @@ function PaginaCliente() {
             {!carregandoCardapio &&
               cardapio &&
               (categoriaAtual ? [categoriaAtual] : []).map((cat) => (
-                <section className="categoria" key={cat.id}>
-                  <h2>{cat.nome}</h2>
-                  {cat.pratos.map((prato) => (
-                    <div className="prato" key={prato.id}>
-                      {prato.foto && (
-                        <img
-                          className="prato-foto prato-foto-clicavel"
-                          src={prato.foto}
-                          alt={prato.nome}
-                          onClick={() => setPratoVendo(prato)}
-                        />
-                      )}
-                      <div className="prato-info">
-                        <div className="nome">{prato.nome}</div>
-                        {prato.descricao && <div className="descricao">{prato.descricao}</div>}
-                        {prato.observacao && <div className="aviso-prato">⚠ {prato.observacao}</div>}
-                        <div className="preco">{formatarMoeda(prato.preco)}</div>
-                        {pratoEsgotado(prato) ? (
-                          <div className="selo-esgotado">Esgotado</div>
-                        ) : prato.estoque > 0 && prato.estoque <= 5 ? (
-                          <div className="selo-restam">Restam {prato.estoque}</div>
-                        ) : null}
-                        {prato.peso || prato.quantidade ? (
-                          <div className="tempo-preparo">{[prato.peso && `⚖ ${prato.peso}`, prato.quantidade && `🍽 ${prato.quantidade}`].filter(Boolean).join(' · ')}</div>
-                        ) : null}
-                        {prato.tempo_preparo ? <div className="tempo-preparo">⏱ {prato.tempo_preparo} min</div> : null}
-                      </div>
-                      {pratoEsgotado(prato) ? (
-                        <div className="indisponivel">Indisponível</div>
-                      ) : prato.grupos && prato.grupos.length > 0 ? (
-                        <div style={{ textAlign: 'center' }}>
-                          <button className="btn-escolher" type="button" onClick={() => setPratoEscolhendo(prato)}>
-                            Escolher
-                          </button>
-                          {quantidadeDoPrato(prato.id) > 0 && (
-                            <div style={{ fontSize: '0.8rem', color: '#a3352b', marginTop: 4 }}>
-                              {quantidadeDoPrato(prato.id)} no pedido
+                <section key={cat.id}>
+                  <h2 className="cat-titulo">{cat.nome}</h2>
+                  <div className="lista-pratos stagger" key={cat.id}>
+                    {cat.pratos.map((prato) => {
+                      const esgotado = pratoEsgotado(prato);
+                      const temOpcoes = prato.grupos && prato.grupos.length > 0;
+                      const qtdSimples = carrinho[`p${prato.id}`]?.quantidade || 0;
+                      return (
+                        <article className="dish" key={prato.id}>
+                          <div className="dish-info">
+                            <div className="nm">{prato.nome}</div>
+                            {prato.descricao && <div className="ds">{prato.descricao}</div>}
+                            {(prato.peso || prato.quantidade || prato.tempo_preparo) ? (
+                              <div className="meta">
+                                {prato.peso && <span><I n="scale" />{prato.peso}</span>}
+                                {prato.quantidade && <span><I n="portion" />{prato.quantidade}</span>}
+                                {prato.tempo_preparo ? <span><I n="clock" />{prato.tempo_preparo} min</span> : null}
+                              </div>
+                            ) : null}
+                            {prato.observacao && (
+                              <span className="tag warn tag-aviso"><I n="alert" />{prato.observacao}</span>
+                            )}
+                            <div className="dish-rodape">
+                              <span className="pr money">{formatarMoeda(prato.preco)}</span>
+                              {esgotado ? (
+                                <span className="tag danger">Esgotado</span>
+                              ) : prato.estoque > 0 && prato.estoque <= 5 ? (
+                                <span className="tag danger">Restam {prato.estoque}</span>
+                              ) : null}
+                              <span className="dish-acao">
+                                {esgotado ? (
+                                  <span className="indisponivel">Indisponível</span>
+                                ) : temOpcoes ? (
+                                  <>
+                                    <button className="btn sm" type="button" onClick={() => setPratoEscolhendo(prato)}>
+                                      Escolher
+                                    </button>
+                                    {quantidadeDoPrato(prato.id) > 0 && (
+                                      <span className="no-pedido">{quantidadeDoPrato(prato.id)} no pedido</span>
+                                    )}
+                                  </>
+                                ) : qtdSimples === 0 ? (
+                                  <button
+                                    className="add-fab"
+                                    type="button"
+                                    aria-label="Aumentar"
+                                    disabled={limiteQuantidade(prato, []) <= 0}
+                                    onClick={() => alterarQuantidade(prato, 1)}
+                                  >
+                                    <I n="plus" />
+                                  </button>
+                                ) : (
+                                  <span className="stepper">
+                                    <button type="button" aria-label="Diminuir" onClick={() => alterarQuantidade(prato, -1)}>
+                                      <I n="minus" s={18} />
+                                    </button>
+                                    <span className="n">{qtdSimples}</span>
+                                    <button
+                                      type="button"
+                                      aria-label="Aumentar"
+                                      disabled={limiteQuantidade(prato, []) <= 0}
+                                      onClick={() => alterarQuantidade(prato, 1)}
+                                    >
+                                      <I n="plus" s={18} />
+                                    </button>
+                                  </span>
+                                )}
+                              </span>
                             </div>
+                          </div>
+                          {prato.foto && (
+                            <button className="dish-foto" type="button" onClick={() => setPratoVendo(prato)} aria-label={'Ver foto de ' + prato.nome}>
+                              <img src={prato.foto} alt={prato.nome} />
+                            </button>
                           )}
-                        </div>
-                      ) : (
-                        <div className="qtd-controle">
-                          <button type="button" aria-label="Diminuir" onClick={() => alterarQuantidade(prato, -1)}>
-                            −
-                          </button>
-                          <span>{carrinho[`p${prato.id}`]?.quantidade || 0}</span>
-                          <button
-                            type="button"
-                            aria-label="Aumentar"
-                            disabled={limiteQuantidade(prato, []) <= 0}
-                            onClick={() => alterarQuantidade(prato, 1)}
-                          >
-                            +
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                        </article>
+                      );
+                    })}
+                  </div>
                 </section>
               ))}
           </main>
 
           {itensCarrinho.length > 0 && (
-            <div className="rodape-carrinho">
-              <div className="total">Total: {formatarMoeda(totalCarrinho)}</div>
-              <button onClick={() => setModalRevisao(true)} type="button">
+            <div className="cartbar">
+              <span className="count">{unidadesCarrinho}</span>
+              <div style={{ lineHeight: 1.2 }}>
+                <div className="cb-rot">Total</div>
+                <div className="cb-total money">{formatarMoeda(totalCarrinho)}</div>
+              </div>
+              <button className="go" onClick={() => setModalRevisao(true)} type="button">
                 Ver pedido
+                <I n="chev-r" s={18} />
               </button>
             </div>
           )}
@@ -583,31 +697,32 @@ function PaginaCliente() {
             <div className="overlay" onClick={() => setPratoVendo(null)}>
               <div className="modal modal-foto" onClick={(e) => e.stopPropagation()}>
                 <img className="foto-grande" src={pratoVendo.foto} alt={pratoVendo.nome} />
-                <h3>{pratoVendo.nome}</h3>
-                <div className="preco-grande">
-                  {formatarMoeda(pratoVendo.preco)}
-                  {pratoVendo.grupos && pratoVendo.grupos.length > 0 ? ' (a partir de)' : ''}
-                </div>
-                {pratoVendo.descricao && <p className="descricao-grande">{pratoVendo.descricao}</p>}
-                {pratoVendo.observacao && <p className="aviso-prato aviso-grande">⚠ {pratoVendo.observacao}</p>}
-                {pratoVendo.peso || pratoVendo.quantidade || pratoVendo.tempo_preparo ? (
-                  <p className="detalhes-grande">
-                    {[
-                      pratoVendo.peso && `⚖ ${pratoVendo.peso}`,
-                      pratoVendo.quantidade && `🍽 ${pratoVendo.quantidade}`,
-                      pratoVendo.tempo_preparo ? `⏱ ${pratoVendo.tempo_preparo} min` : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
+                <div className="modal-corpo">
+                  <h3 style={{ fontSize: 24, fontWeight: 700 }}>{pratoVendo.nome}</h3>
+                  <p className="preco-grande money">
+                    {formatarMoeda(pratoVendo.preco)}
+                    {pratoVendo.grupos && pratoVendo.grupos.length > 0 ? ' (a partir de)' : ''}
                   </p>
-                ) : null}
+                  {pratoVendo.descricao && <p className="descricao-grande">{pratoVendo.descricao}</p>}
+                  {pratoVendo.observacao && (
+                    <div className="aviso-box"><I n="alert" s={18} /><span>{pratoVendo.observacao}</span></div>
+                  )}
+                  {pratoVendo.peso || pratoVendo.quantidade || pratoVendo.tempo_preparo ? (
+                    <div className="facts">
+                      {pratoVendo.peso && <div className="fact"><I n="scale" />{pratoVendo.peso}</div>}
+                      {pratoVendo.quantidade && <div className="fact"><I n="portion" />{pratoVendo.quantidade}</div>}
+                      {pratoVendo.tempo_preparo ? <div className="fact"><I n="clock" />{pratoVendo.tempo_preparo} min</div> : null}
+                    </div>
+                  ) : null}
+                </div>
                 <div className="acoes">
-                  <button className="btn-cancelar" type="button" onClick={() => setPratoVendo(null)}>
+                  <button className="btn line" type="button" onClick={() => setPratoVendo(null)}>
                     Fechar
                   </button>
                   <button
-                    className="btn-confirmar"
+                    className="btn"
                     type="button"
+                    style={{ flex: 2 }}
                     disabled={pratoEsgotado(pratoVendo)}
                     onClick={() => {
                       const prato = pratoVendo;
@@ -658,25 +773,40 @@ function PaginaCliente() {
 
 // Nome + WhatsApp (o WhatsApp é opcional). O aviso explica para que o número é usado.
 function FormContato({ titulo, nome, setNome, whatsapp, setWhatsapp, onContinuar }) {
-  const campo = { width: '100%', padding: 12, borderRadius: 10, border: 'none', fontSize: '1rem', marginTop: 8 };
   return (
-    <div style={{ marginTop: 10, width: '100%', maxWidth: 320 }}>
-      {titulo && <div style={{ color: '#fff', fontWeight: 600 }}>{titulo}</div>}
-      <input type="text" placeholder="Seu nome" value={nome} onChange={(e) => setNome(e.target.value)} style={campo} />
-      <input
-        type="tel"
-        inputMode="tel"
-        placeholder="Seu WhatsApp com DDD (opcional)"
-        value={whatsapp}
-        onChange={(e) => setWhatsapp(e.target.value)}
-        style={campo}
-      />
-      <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.78rem', marginTop: 6, lineHeight: 1.35 }}>
-        Informe seu WhatsApp para receber as últimas novidades da loja. Não é obrigatório: se preferir, pode deixar em
-        branco.
+    <div className="form-contato rise">
+      {titulo && <h2>{titulo}</h2>}
+      <div className="field">
+        <label htmlFor="cliente-nome">Seu nome</label>
+        <div className="input-wrap">
+          <I n="user" />
+          <input id="cliente-nome" className="input" type="text" placeholder="Seu nome" autoComplete="given-name" value={nome} onChange={(e) => setNome(e.target.value)} />
+        </div>
       </div>
-      <button className="opcao-escolha" style={{ marginTop: 10, justifyContent: 'center' }} onClick={onContinuar} type="button">
+      <div className="field">
+        <label htmlFor="cliente-zap">
+          WhatsApp <span className="opcional">(opcional)</span>
+        </label>
+        <div className="input-wrap">
+          <I n="chat" />
+          <input
+            id="cliente-zap"
+            className="input"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="(11) 91234-5678"
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
+          />
+        </div>
+        <p className="hint">
+          Informe seu WhatsApp para receber as últimas novidades da loja. Não é obrigatório: se preferir, pode deixar em branco.
+        </p>
+      </div>
+      <button className="btn block" onClick={onContinuar} type="button">
         Continuar
+        <I n="back" flip />
       </button>
     </div>
   );
@@ -731,62 +861,88 @@ function ModalOpcoes({ prato, onFechar, onAdicionar, limiteQuantidade }) {
 
   return (
     <div className="overlay">
-      <div className="modal">
-        <h3>{prato.nome}</h3>
-        {grupos.map((g) => (
-          <div className="grupo-opcoes" key={g.id}>
-            <h4>{g.nome}</h4>
-            <div className="dica">{g.tipo === 'unica' ? 'Escolha 1 (obrigatório)' : 'Opcional — marque quantos quiser (valor à parte)'}</div>
-            {g.opcoes.map((o) => {
-              const marcada = (escolhas[g.id] || []).includes(o.id);
-              const acabou = o.estoque === 0 || o.ativo === false;
-              return (
-                <label className={'opcao-linha' + (marcada ? ' marcada' : '') + (acabou ? ' esgotada' : '')} key={o.id}>
-                  <input
-                    type={g.tipo === 'unica' ? 'radio' : 'checkbox'}
-                    name={'grupo-' + g.id}
-                    checked={marcada}
-                    disabled={acabou}
-                    onChange={() => marcar(g, o)}
-                  />
-                  <span className="opcao-nome">
-                    {o.nome}
-                    {o.descricao && <small className="opcao-descricao">{o.descricao}</small>}
-                  </span>
-                  {acabou ? (
-                    <span className="opcao-preco">Esgotado</span>
+      <div className="modal" role="dialog" aria-label={prato.nome}>
+        <div className="grab" />
+        <div className="modal-cab">
+          <h3>{prato.nome}</h3>
+          <button className="icon-btn" type="button" onClick={onFechar} aria-label="Voltar">
+            <I n="x" />
+          </button>
+        </div>
+        <div className="modal-corpo" style={{ paddingTop: 0 }}>
+          {grupos.map((g) => {
+            const unica = g.tipo === 'unica';
+            const escolhido = (escolhas[g.id] || []).length > 0;
+            return (
+              <div key={g.id}>
+                <div className="grp-h">
+                  <h4>{g.nome}</h4>
+                  {unica ? (
+                    escolhido ? (
+                      <span className="tag ok"><I n="check" />Escolhido</span>
+                    ) : (
+                      <span className="tag brand">Escolha 1 (obrigatório)</span>
+                    )
                   ) : (
-                    o.precoAdicional > 0 && <span className="opcao-preco">+ {formatarMoeda(o.precoAdicional)}</span>
+                    <span className="tag neutral">Opcional, valor à parte</span>
                   )}
-                </label>
-              );
-            })}
-          </div>
-        ))}
-        <div className="linha-item" style={{ marginTop: 16, alignItems: 'center' }}>
-          <span>Quantidade</span>
-          <div className="qtd-controle">
+                </div>
+                {!unica && <p className="hint" style={{ margin: '-4px 0 10px' }}>Marque quantos quiser.</p>}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {g.opcoes.map((o) => {
+                    const marcada = (escolhas[g.id] || []).includes(o.id);
+                    const acabou = o.estoque === 0 || o.ativo === false;
+                    return (
+                      <label className={'opt' + (unica ? '' : ' sq') + (marcada ? ' on' : '') + (acabou ? ' esgotada' : '')} key={o.id}>
+                        <input
+                          className="sr-only"
+                          type={unica ? 'radio' : 'checkbox'}
+                          name={'grupo-' + g.id}
+                          checked={marcada}
+                          disabled={acabou}
+                          onChange={() => marcar(g, o)}
+                        />
+                        <span className="mark"><I n="check" /></span>
+                        <span className="opt-txt">
+                          <span className="o-nm">{o.nome}</span>
+                          {o.descricao && <span className="o-ds">{o.descricao}</span>}
+                        </span>
+                        {acabou ? (
+                          <span className="o-pr">Esgotado</span>
+                        ) : (
+                          o.precoAdicional > 0 && <span className="o-pr money">+ {formatarMoeda(o.precoAdicional)}</span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {erro && (
+            <p className="erro" style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <I n="alert" s={16} />
+              {erro}
+            </p>
+          )}
+        </div>
+        <div className="acoes">
+          <span className="stepper light grande">
             <button type="button" aria-label="Diminuir" onClick={() => setQuantidade((q) => Math.max(1, q - 1))}>
-              −
+              <I n="minus" />
             </button>
-            <span>{quantidade}</span>
+            <span className="n">{quantidade}</span>
             <button
               type="button"
               aria-label="Aumentar"
               disabled={quantidade >= limite}
               onClick={() => setQuantidade((q) => Math.min(limite, q + 1))}
             >
-              +
+              <I n="plus" />
             </button>
-          </div>
-        </div>
-        {erro && <div className="erro">{erro}</div>}
-        <div className="acoes">
-          <button className="btn-cancelar" type="button" onClick={onFechar}>
-            Voltar
-          </button>
-          <button className="btn-confirmar" type="button" onClick={confirmar}>
-            Adicionar — {formatarMoeda(precoUnit * quantidade)}
+          </span>
+          <button className="btn" type="button" onClick={confirmar}>
+            Adicionar {formatarMoeda(precoUnit * quantidade)}
           </button>
         </div>
       </div>
@@ -841,20 +997,22 @@ function ModalRevisarPedido({ itens, total, modo, mesaAtual, cliente, onFechar, 
   if (sucesso) {
     return (
       <div className="overlay">
-        <div className="modal">
-          <div className="sucesso">
-            <div className="check">✅</div>
-            <h3>Pedido enviado!</h3>
-            <p>
-              Pedido nº {sucesso.pedidoId} — Total {formatarMoeda(sucesso.total)}
-            </p>
-            <p>Aguarde, a equipe já foi avisada.</p>
-            <div className="acoes">
-              <button className="btn-confirmar" type="button" onClick={onSucesso}>
-                Fechar
-              </button>
-            </div>
+        <div className="modal wine modal-vinho" role="dialog" aria-label="Pedido enviado">
+          <div className="seal">
+            <span className="disc" />
+            <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="#33070A" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
           </div>
+          <h3>Pedido enviado!</h3>
+          <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <span className="tag gold">Pedido nº {sucesso.pedidoId}</span>
+            <span className="tag gold money">Total {formatarMoeda(sucesso.total)}</span>
+          </div>
+          <p style={{ color: '#F1D8CF', fontSize: 16, marginTop: 14 }}>Aguarde, a equipe já foi avisada.</p>
+          <button className="btn block white" type="button" onClick={onSucesso}>
+            Fechar
+          </button>
         </div>
       </div>
     );
@@ -862,65 +1020,78 @@ function ModalRevisarPedido({ itens, total, modo, mesaAtual, cliente, onFechar, 
 
   return (
     <div className="overlay">
-      <div className="modal">
-        <h3>Confirmar pedido</h3>
-        {itens.map((i) => (
-          <div key={i.chave} style={{ marginBottom: 10 }}>
-            <div className="linha-item" style={{ alignItems: 'center', gap: 8, marginBottom: 2 }}>
-              <span style={{ flex: 1 }}>
-                {i.prato.nome}
-                {i.opcoes.length > 0 && (
-                  <small style={{ display: 'block', color: '#888' }}>
-                    {i.opcoes.map((o) => o.nome).join(' · ')}
-                  </small>
-                )}
-              </span>
-              <div className="qtd-controle">
-                <button type="button" aria-label="Diminuir" onClick={() => onAlterar(i.chave, -1)}>
-                  −
-                </button>
-                <span>{i.quantidade}</span>
-                <button type="button" aria-label="Aumentar" onClick={() => onAlterar(i.chave, 1)}>
-                  +
-                </button>
+      <div className="modal" role="dialog" aria-label="Confirmar pedido">
+        <div className="grab" />
+        <div className="modal-cab">
+          <h3>Confirmar pedido</h3>
+          <button className="icon-btn" type="button" onClick={onFechar} aria-label="Voltar">
+            <I n="x" />
+          </button>
+        </div>
+        <div className="modal-corpo" style={{ background: 'var(--bg)' }}>
+          <div className="stagger" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {itens.map((i) => (
+              <div className="linha-it" key={i.chave}>
+                <div className="linha-it-topo">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="nm">{i.prato.nome}</div>
+                    {i.opcoes.length > 0 && (
+                      <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>{i.opcoes.map((o) => o.nome).join(', ')}</div>
+                    )}
+                    <div className="money" style={{ marginTop: 6, fontWeight: 600, color: 'var(--brand-ink)' }}>
+                      {formatarMoeda(i.precoUnit * i.quantidade)}
+                    </div>
+                  </div>
+                  <span className="stepper light">
+                    <button type="button" aria-label="Diminuir" onClick={() => onAlterar(i.chave, -1)}>
+                      <I n="minus" s={18} />
+                    </button>
+                    <span className="n">{i.quantidade}</span>
+                    <button type="button" aria-label="Aumentar" onClick={() => onAlterar(i.chave, 1)}>
+                      <I n="plus" s={18} />
+                    </button>
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  className="input"
+                  style={{ height: 42, fontSize: 14, marginTop: 10, background: 'var(--surface-2)' }}
+                  placeholder="Observação deste prato (ex: sem cebola)"
+                  aria-label={'Observação de ' + i.prato.nome}
+                  maxLength={200}
+                  value={i.observacao || ''}
+                  onChange={(e) => onObservacao(i.chave, e.target.value)}
+                />
               </div>
-              <span style={{ minWidth: 70, textAlign: 'right' }}>{formatarMoeda(i.precoUnit * i.quantidade)}</span>
-            </div>
-            <input
-              type="text"
-              className="obs-item"
-              placeholder="Observação deste prato (ex: sem cebola)"
-              maxLength={200}
-              value={i.observacao || ''}
-              onChange={(e) => onObservacao(i.chave, e.target.value)}
+            ))}
+          </div>
+          <div className="field" style={{ marginTop: 18 }}>
+            <label htmlFor="pedido-campo">{paraLevar ? 'Seu nome' : 'Número da mesa'}</label>
+            <input id="pedido-campo" className="input" type="text" value={valorCampo} onChange={(e) => setValorCampo(e.target.value)} />
+          </div>
+          <div className="field" style={{ marginTop: 14 }}>
+            <label htmlFor="pedido-obs">Observações</label>
+            <textarea
+              id="pedido-obs"
+              className="input"
+              placeholder="Observações (ex: sem cebola)"
+              rows={2}
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
             />
           </div>
-        ))}
-        <div
-          className="linha-item"
-          style={{ fontWeight: 700, borderTop: '1px solid #eee', paddingTop: 8, marginTop: 8 }}
-        >
-          <span>Total</span>
-          <span>{formatarMoeda(total)}</span>
+          {erro && <p className="erro" style={{ marginTop: 12 }}>{erro}</p>}
         </div>
-        <input
-          type="text"
-          placeholder={paraLevar ? 'Seu nome' : 'Número da mesa'}
-          value={valorCampo}
-          onChange={(e) => setValorCampo(e.target.value)}
-        />
-        <textarea
-          placeholder="Observações (ex: sem cebola)"
-          rows={2}
-          value={observacao}
-          onChange={(e) => setObservacao(e.target.value)}
-        />
-        {erro && <div className="erro">{erro}</div>}
-        <div className="acoes">
-          <button className="btn-cancelar" type="button" onClick={onFechar}>
+        <div className="row" style={{ padding: '14px 22px 0', alignItems: 'center' }}>
+          <span style={{ fontWeight: 600 }}>Total</span>
+          <span className="money" style={{ fontFamily: 'var(--f-d)', fontWeight: 700, fontSize: 22 }}>{formatarMoeda(total)}</span>
+        </div>
+        <div className="acoes" style={{ borderTop: 0 }}>
+          <button className="btn line" type="button" onClick={onFechar}>
             Voltar
           </button>
-          <button className="btn-confirmar" type="button" disabled={enviando || itens.length === 0} onClick={enviarPedido}>
+          <button className="btn" type="button" style={{ flex: 2 }} disabled={enviando || itens.length === 0} onClick={enviarPedido}>
+            <I n="send" />
             {enviando ? 'Enviando...' : 'Enviar pedido'}
           </button>
         </div>
@@ -966,10 +1137,12 @@ function ModalFecharConta({ mesaAtual, onFechar }) {
   if (erro && !dados) {
     return (
       <div className="overlay">
-        <div className="modal">
-          <p className="erro">{erro}</p>
+        <div className="modal" role="dialog" aria-label="Fechar conta">
+          <div className="modal-corpo">
+            <p className="erro">{erro}</p>
+          </div>
           <div className="acoes">
-            <button className="btn-cancelar" type="button" onClick={onFechar}>
+            <button className="btn line" type="button" onClick={onFechar}>
               Fechar
             </button>
           </div>
@@ -981,23 +1154,30 @@ function ModalFecharConta({ mesaAtual, onFechar }) {
   if (sucesso) {
     return (
       <div className="overlay">
-        <div className="modal">
-          <div className="sucesso">
-            <div className="check">✅</div>
-            <h3>Equipe avisada!</h3>
-            <p>
-              Subtotal: {formatarMoeda(sucesso.subtotal)}
-              <br />
-              Taxa de serviço (10%): {formatarMoeda(sucesso.taxaServico)}
-            </p>
-            <p style={{ fontSize: '1.2rem', fontWeight: 700 }}>Total: {formatarMoeda(sucesso.total)}</p>
-            <p>Alguém vai até sua mesa para fechar a conta.</p>
-            <div className="acoes">
-              <button className="btn-confirmar" type="button" onClick={onFechar}>
-                Fechar
-              </button>
+        <div className="modal wine modal-vinho" role="dialog" aria-label="Equipe avisada">
+          <div className="sino"><I n="concierge" s={52} /></div>
+          <h3>Equipe avisada!</h3>
+          <p style={{ color: '#F1D8CF', fontSize: 15.5, marginTop: 10 }}>Alguém vai até sua mesa para fechar a conta.</p>
+          <div className="total-card">
+            <div className="row" style={{ fontSize: 14.5, color: 'var(--ink-2)' }}>
+              <span>Subtotal</span>
+              <span className="money">{formatarMoeda(sucesso.subtotal)}</span>
+            </div>
+            <div className="row" style={{ fontSize: 14.5, color: 'var(--ink-2)', marginTop: 6 }}>
+              <span>Taxa de serviço (10%)</span>
+              <span className="money">{formatarMoeda(sucesso.taxaServico)}</span>
+            </div>
+            <div className="dash" />
+            <div className="row" style={{ alignItems: 'center' }}>
+              <span style={{ fontFamily: 'var(--f-d)', fontWeight: 600, fontSize: 17 }}>Total</span>
+              <span className="money" style={{ fontFamily: 'var(--f-d)', fontWeight: 800, fontSize: 32, color: 'var(--brand-ink)' }}>
+                {formatarMoeda(sucesso.total)}
+              </span>
             </div>
           </div>
+          <button className="btn block on-wine" type="button" onClick={onFechar}>
+            Fechar
+          </button>
         </div>
       </div>
     );
@@ -1009,47 +1189,54 @@ function ModalFecharConta({ mesaAtual, onFechar }) {
 
   return (
     <div className="overlay">
-      <div className="modal">
-        <h3>Fechar conta — Mesa {mesaAtual}</h3>
-        {dados.pedidos
-          .filter((p) => p.status !== 'cancelado')
-          .flatMap((p) => p.itens)
-          .map((i, idx) => (
-            <div className="linha-item" key={idx}>
-              <span>
-                {i.quantidade}x {i.nome}
-                {i.opcoes && <small style={{ display: 'block', color: '#888' }}>{i.opcoes}</small>}
-              </span>
-              <span>{formatarMoeda(i.subtotal)}</span>
-            </div>
-          ))}
-        {dados.subtotal <= 0 && <p className="erro">Ainda não há pedidos nesta comanda.</p>}
-        {dados.fechamentoPendente && (
-          <p style={{ color: '#7a5a12' }}>A conta já foi solicitada — a equipe está a caminho.</p>
-        )}
-        <div className="linha-item" style={{ borderTop: '1px solid #eee', paddingTop: 8, marginTop: 8 }}>
-          <span>Subtotal dos pedidos</span>
-          <span>{formatarMoeda(dados.subtotal)}</span>
-        </div>
-        <div className="linha-item">
-          <span>Taxa de serviço (10%)</span>
-          <span>{formatarMoeda(dados.taxaServico)}</span>
-        </div>
-        <div className="linha-item destaque-total">
-          <span>Total a pagar</span>
-          <span>{formatarMoeda(total)}</span>
-        </div>
-        {erro && <div className="erro">{erro}</div>}
-        <div className="acoes">
-          <button className="btn-cancelar" type="button" onClick={onFechar}>
-            Voltar
+      <div className="modal" role="dialog" aria-label="Fechar conta">
+        <div className="grab" />
+        <div className="modal-cab">
+          <h3>Fechar conta</h3>
+          <button className="icon-btn" type="button" onClick={onFechar} aria-label="Voltar">
+            <I n="x" />
           </button>
-          <button
-            className="btn-confirmar"
-            type="button"
-            disabled={enviando || dados.subtotal <= 0}
-            onClick={confirmar}
-          >
+        </div>
+        <div className="modal-corpo" style={{ background: 'var(--bg)' }}>
+          <div className="recibo rise">
+            <h2 style={{ fontSize: 18, fontWeight: 600, textAlign: 'center' }}>Mesa {mesaAtual}</h2>
+            <div className="dash" />
+            {dados.pedidos
+              .filter((p) => p.status !== 'cancelado')
+              .flatMap((p) => p.itens)
+              .map((i, idx) => (
+                <div className="r-li" key={idx}>
+                  <span className="q">{i.quantidade}×</span>
+                  <span style={{ flex: 1 }}>
+                    {i.nome}
+                    {i.opcoes && <small className="muted" style={{ display: 'block', fontSize: 12.5 }}>{i.opcoes}</small>}
+                  </span>
+                  <span className="money">{formatarMoeda(i.subtotal)}</span>
+                </div>
+              ))}
+            {dados.subtotal <= 0 && <p className="erro">Ainda não há pedidos nesta comanda.</p>}
+            <div className="dash" />
+            <div className="row" style={{ fontSize: 14, color: 'var(--ink-2)' }}>
+              <span>Subtotal dos pedidos</span>
+              <span className="money">{formatarMoeda(dados.subtotal)}</span>
+            </div>
+            <div className="row" style={{ fontSize: 14, color: 'var(--ink-2)', marginTop: 6 }}>
+              <span>Taxa de serviço (10%)</span>
+              <span className="money">{formatarMoeda(dados.taxaServico)}</span>
+            </div>
+            <div className="row" style={{ marginTop: 14, alignItems: 'center' }}>
+              <span style={{ fontFamily: 'var(--f-d)', fontWeight: 600, fontSize: 16 }}>Total a pagar</span>
+              <span className="total-grande money">{formatarMoeda(total)}</span>
+            </div>
+          </div>
+          {dados.fechamentoPendente && (
+            <div className="aviso-box"><I n="concierge" s={18} /><span>A conta já foi solicitada. A equipe está a caminho.</span></div>
+          )}
+          {erro && <p className="erro" style={{ marginTop: 12 }}>{erro}</p>}
+        </div>
+        <div className="acoes">
+          <button className="btn" type="button" disabled={enviando || dados.subtotal <= 0} onClick={confirmar}>
+            <I n="concierge" />
             {enviando ? 'Enviando...' : 'Chamar para fechar'}
           </button>
         </div>
@@ -1085,94 +1272,102 @@ function DetalheComanda({ config, comandaId, mesaUrl, temOutras, onPedirMais, on
   }, [comandaId, fechando]);
 
   const nome = mesaUrl && comandaId.startsWith(mesaUrl + ' - ') ? comandaId.slice(mesaUrl.length + 3) : '';
-  const titulo = mesaUrl ? (nome ? `Mesa ${mesaUrl} — ${nome}` : `Mesa ${mesaUrl} (conta junta)`) : comandaId;
+  const titulo = mesaUrl ? (nome ? `Mesa ${mesaUrl} - ${nome}` : `Mesa ${mesaUrl} (conta junta)`) : comandaId;
 
   return (
-    <div>
-      <header className="topo">
-        <div className="topo-linha">
-          <div className="topo-marca">
-            {config.logoUrl && <img src={config.logoUrl} className="logo-topo" alt="Logo" />}
-            <h1>{config.nomeLoja}</h1>
+    <div className="tela">
+      <header className="appbar wine" style={{ paddingBottom: 18 }}>
+        <div className="appbar-row">
+          {config.logoUrl && <img src={config.logoUrl} className="brand-mark" alt="" />}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="ttl">{config.nomeLoja}</div>
+            <div className="sub">{titulo}</div>
           </div>
         </div>
-        <div className="mesa">{titulo}</div>
       </header>
 
-      <main>
+      <main className="stagger" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         {erro && <p className="erro">{erro}</p>}
         {!dados && !erro && <div className="vazio">Carregando...</div>}
         {dados && dados.pedidos.length === 0 && <div className="vazio">Nenhum pedido nesta comanda ainda.</div>}
         {dados &&
-          dados.pedidos.map((p) => (
-            <div className="prato" key={p.id} style={{ display: 'block', opacity: p.status === 'cancelado' ? 0.5 : 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <strong>
-                  Pedido {new Date(p.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                </strong>
-                <span style={{ color: '#a3352b', fontWeight: 600 }}>{STATUS_ROTULO[p.status] || p.status}</span>
-              </div>
-              {p.itens.map((i, idx) => (
-                <div className="linha-item" key={idx} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>
-                    {i.quantidade}x {i.nome}
-                    {i.opcoes && <small style={{ display: 'block', color: '#888' }}>{i.opcoes}</small>}
-                    {i.observacao && <small style={{ display: 'block', color: '#7a5a12' }}>Obs: {i.observacao}</small>}
+          dados.pedidos.map((p) => {
+            const [cor, icone] = STATUS_SELO[p.status] || ['neutral', 'info'];
+            return (
+              <div className="ord" key={p.id} style={{ opacity: p.status === 'cancelado' ? 0.55 : 1 }}>
+                <div className="ord-h">
+                  <b>Pedido {new Date(p.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</b>
+                  <span className={'tag ' + cor} style={{ marginLeft: 'auto' }}>
+                    <I n={icone} />
+                    {STATUS_ROTULO[p.status] || p.status}
                   </span>
-                  <span>{formatarMoeda(i.subtotal)}</span>
                 </div>
-              ))}
-              {p.observacao && <div style={{ color: '#7a5a12', fontSize: '0.85rem' }}>Obs: {p.observacao}</div>}
-            </div>
-          ))}
+                <div style={{ marginTop: 6 }}>
+                  {p.itens.map((i, idx) => (
+                    <div className="li" key={idx}>
+                      <span className="q">{i.quantidade}×</span>
+                      <span style={{ flex: 1 }}>
+                        {i.nome}
+                        {i.opcoes && <span className="muted" style={{ display: 'block', fontSize: 13 }}>{i.opcoes}</span>}
+                        {i.observacao && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: 'var(--warn)' }}>
+                            <I n="note" s={13} />
+                            Obs: {i.observacao}
+                          </span>
+                        )}
+                      </span>
+                      <span className="money">{formatarMoeda(i.subtotal)}</span>
+                    </div>
+                  ))}
+                </div>
+                {p.observacao && <p style={{ color: 'var(--warn)', fontSize: 13.5, marginTop: 6 }}>Obs: {p.observacao}</p>}
+              </div>
+            );
+          })}
 
         {dados && dados.subtotal > 0 && (
-          <div className="prato" style={{ display: 'block' }}>
-            <div className="linha-item" style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div className="sum">
+            <div className="row">
               <span>Subtotal</span>
-              <span>{formatarMoeda(dados.subtotal)}</span>
+              <span className="money">{formatarMoeda(dados.subtotal)}</span>
             </div>
-            <div className="linha-item" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div className="row" style={{ marginTop: 4 }}>
               <span>Taxa de serviço (10%)</span>
-              <span>{formatarMoeda(dados.taxaServico)}</span>
+              <span className="money">{formatarMoeda(dados.taxaServico)}</span>
             </div>
-            <div className="destaque-total" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ height: 1, background: 'rgba(255,255,255,.14)', margin: '12px 0' }} />
+            <div className="row total">
               <span>Total</span>
-              <span>{formatarMoeda(dados.subtotal + dados.taxaServico)}</span>
+              <span className="total-v money">{formatarMoeda(dados.subtotal + dados.taxaServico)}</span>
             </div>
           </div>
         )}
 
         {dados && dados.fechamentoPendente && (
-          <div className="aviso-fechado" style={{ borderRadius: 8, marginBottom: 10 }}>
-            Conta solicitada — a equipe está a caminho.
+          <div className="aviso-box" style={{ marginTop: 0 }}>
+            <I n="concierge" s={18} />
+            <span>Conta solicitada. A equipe está a caminho.</span>
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-          <button className="btn-confirmar" style={{ padding: 14, borderRadius: 8, border: 'none', background: '#a3352b', color: '#fff', fontSize: '1rem' }} type="button" onClick={onPedirMais}>
-            Pedir mais
+        {temOutras && (
+          <button className="link-voltar" type="button" onClick={onTrocar} style={{ color: 'var(--brand-ink)', fontWeight: 600 }}>
+            <I n="back" s={18} />
+            Ver outras comandas da mesa
           </button>
-          <button
-            className="btn-cancelar"
-            style={{ padding: 14, borderRadius: 8, border: 'none', background: '#eee', fontSize: '1rem' }}
-            type="button"
-            disabled={!dados || dados.subtotal <= 0}
-            onClick={() => setFechando(true)}
-          >
-            Fechar conta
-          </button>
-          {temOutras && (
-            <button
-              type="button"
-              onClick={onTrocar}
-              style={{ background: 'none', border: 'none', color: '#a3352b', fontSize: '0.95rem', padding: 8 }}
-            >
-              ← Ver outras comandas da mesa
-            </button>
-          )}
-        </div>
+        )}
       </main>
+
+      <div className="rodape-fixo">
+        <button className="btn block" type="button" onClick={onPedirMais}>
+          <I n="plus" />
+          Pedir mais
+        </button>
+        <button className="btn block line" type="button" disabled={!dados || dados.subtotal <= 0} onClick={() => setFechando(true)}>
+          <I n="wallet" />
+          Fechar conta
+        </button>
+      </div>
 
       {fechando && <ModalFecharConta mesaAtual={comandaId} onFechar={() => setFechando(false)} />}
     </div>
