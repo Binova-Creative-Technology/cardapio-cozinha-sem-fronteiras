@@ -33,7 +33,8 @@ export async function POST(request, { params }) {
 
   const { error: erroUpload } = await db.storage
     .from(UPLOADS_BUCKET)
-    .upload(caminho, bytes, { contentType: arquivo.type, upsert: false });
+    // o nome do arquivo é único (tem a data), então o navegador do cliente pode guardar por 1 ano
+    .upload(caminho, bytes, { contentType: arquivo.type, cacheControl: '31536000', upsert: false });
   if (erroUpload) return Response.json({ erro: erroUpload.message }, { status: 500 });
 
   if (atual.foto) {

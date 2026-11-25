@@ -29,7 +29,7 @@ export async function POST(request) {
 
   const { error: erroUpload } = await db.storage
     .from(UPLOADS_BUCKET)
-    .upload(caminho, bytes, { contentType: arquivo.type, upsert: false });
+    .upload(caminho, bytes, { contentType: arquivo.type, cacheControl: '31536000', upsert: false });
   if (erroUpload) return Response.json({ erro: erroUpload.message }, { status: 500 });
 
   const logoAntiga = await getConfig('logo_url');

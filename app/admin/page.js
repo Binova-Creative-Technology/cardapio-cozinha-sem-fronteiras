@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { reduzirImagem } from '@/lib/imagem';
 
 function formatarMoeda(v) {
   return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -1562,6 +1563,44 @@ function AbaCardapio() {
     carregar();
   }, [carregar]);
 
+  const [otimizando, setOtimizando] = useState(''); // texto de progresso
+
+  // Diminui as fotos já enviadas (as grandes gastam muito tráfego do banco a cada cliente)
+  async function otimizarFotos() {
+    const comFoto = categorias.flatMap((c) => c.pratos).filter((p) => p.foto);
+    if (!confirm(`Diminuir o tamanho de ${comFoto.length} fotos? A qualidade continua boa no celular. Deixe esta tela aberta até terminar.`)) return;
+    let reduzidas = 0;
+    let falhas = 0;
+    let economia = 0;
+    for (let i = 0; i < comFoto.length; i++) {
+      const prato = comFoto[i];
+      setOtimizando(`Otimizando ${i + 1} de ${comFoto.length}...`);
+      try {
+        const resp = await fetch(prato.foto);
+        if (!resp.ok) throw new Error();
+        const blob = await resp.blob();
+        if (blob.size < 200 * 1024) continue; // já está pequena
+        const original = new File([blob], 'foto.' + (blob.type.split('/')[1] || 'jpg'), { type: blob.type });
+        const menor = await reduzirImagem(original);
+        if (menor === original) continue;
+        const formData = new FormData();
+        formData.append('foto', menor);
+        const envio = await fetch('/api/admin/pratos/' + prato.id + '/foto', { method: 'POST', body: formData });
+        if (!envio.ok) throw new Error();
+        reduzidas += 1;
+        economia += original.size - menor.size;
+      } catch {
+        falhas += 1;
+      }
+    }
+    setOtimizando('');
+    carregar();
+    alert(
+      `Pronto: ${reduzidas} fotos diminuídas (${(economia / 1048576).toFixed(1)} MB a menos por cliente que vê o cardápio todo).` +
+        (falhas ? `\n${falhas} não puderam ser otimizadas (tente de novo mais tarde).` : ''),
+    );
+  }
+
   async function adicionarCategoria() {
     if (!novaCategoriaNome.trim()) return;
     await api('/categorias', { method: 'POST', body: JSON.stringify({ nome: novaCategoriaNome.trim() }) });
@@ -1594,6 +1633,19 @@ function AbaCardapio() {
   return (
     <>
       <div className="topbar"><h1>Cardápio</h1></div>
+      <section className="panel rise">
+        <div className="panel-h"><h3>Fotos</h3></div>
+        <p style={{ fontSize: '0.9rem', color: '#666', margin: '0 0 10px' }}>
+          Fotos grandes gastam o limite de tráfego do banco e podem tirar o sistema do ar. As fotos novas já são
+          diminuídas sozinhas; use o botão para diminuir as que já foram enviadas.
+        </p>
+        <div>
+          <button className="btn md" type="button" onClick={otimizarFotos} disabled={!!otimizando}>
+            {otimizando || 'Otimizar fotos já enviadas'}
+          </button>
+        </div>
+      </section>
+
       <section className="panel rise">
         <div className="panel-h"><h3>Nova categoria</h3></div>
         <div className="linha" style={{ maxWidth: 560 }}>
@@ -2116,7 +2168,7 @@ function PratoLinha({ prato, irmaos, abrirOpcoes, onAtualizar, podeSubir, podeDe
     const arquivo = e.target.files[0];
     if (!arquivo) return;
     const formData = new FormData();
-    formData.append('foto', arquivo);
+    formData.append('foto', await reduzirImagem(arquivo));
     try {
       const resp = await fetch('/api/admin/pratos/' + prato.id + '/foto', { method: 'POST', body: formData });
       const dados = await resp.json();
@@ -2626,7 +2678,7 @@ function AbaConfig({ config, onConfigAtualizado }) {
     const arquivo = e.target.files[0];
     if (!arquivo) return;
     const formData = new FormData();
-    formData.append('logo', arquivo);
+    formData.append('logo', await reduzirImagem(arquivo, { maximo: 500, tipo: 'image/png' }));
     try {
       const resp = await fetch('/api/admin/logo', { method: 'POST', body: formData });
       const dados = await resp.json();

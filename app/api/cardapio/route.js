@@ -48,5 +48,7 @@ export async function GET() {
     }))
     .filter((cat) => cat.pratos.length > 0);
 
-  return Response.json(resultado);
+  // Guardado por 20 s na rede da Vercel: vários clientes ao mesmo tempo usam a mesma consulta ao banco.
+  // (O pedido em si é sempre conferido no servidor, então não há risco de vender o que acabou.)
+  return Response.json(resultado, { headers: { 'Cache-Control': 'public, s-maxage=20, stale-while-revalidate=40' } });
 }

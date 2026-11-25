@@ -248,7 +248,10 @@ function PaginaCliente() {
         })
         .catch(() => {});
     };
-    const timer = setInterval(atualizar, 20000);
+    // 1 vez por minuto, e só com a tela aberta (economiza o tráfego do banco)
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') atualizar();
+    }, 60000);
     return () => {
       ativo = false;
       clearInterval(timer);
@@ -668,7 +671,7 @@ function PaginaCliente() {
                           </div>
                           {prato.foto && (
                             <button className="dish-foto" type="button" onClick={() => setPratoVendo(prato)} aria-label={'Ver foto de ' + prato.nome}>
-                              <img src={prato.foto} alt={prato.nome} />
+                              <img src={prato.foto} alt={prato.nome} loading="lazy" />
                             </button>
                           )}
                         </article>

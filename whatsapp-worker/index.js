@@ -228,8 +228,8 @@ async function lacoDeEnvio() {
     } catch (err) {
       log('Erro no envio:', err.message);
     }
-    // depois de enviar, espera um tempo aleatório antes da próxima; sem nada na fila, olha de novo em 8 s
-    await dormir(enviou ? aleatorio(PAUSA_MIN_S, PAUSA_MAX_S) * 1000 : 8000);
+    // depois de enviar, espera um tempo aleatório antes da próxima; sem nada na fila, olha de novo em 20 s
+    await dormir(enviou ? aleatorio(PAUSA_MIN_S, PAUSA_MAX_S) * 1000 : 20000);
   }
 }
 
