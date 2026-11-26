@@ -364,11 +364,15 @@ textarea.input{height:auto;min-height:84px;padding:12px 16px;resize:vertical;lin
 .cmd-row{display:grid;grid-template-columns:110px minmax(0,1.2fr) minmax(0,1fr) 110px minmax(0,1.2fr) 150px 24px;align-items:center;gap:14px;padding:14px 18px;min-height:68px;cursor:pointer;width:100%}
 .cmd-row:hover{background:var(--surface-2)}
 .cmd-row .mesa{font-family:var(--f-d);font-weight:600;font-size:15.5px}
-.cmd.novo{box-shadow:0 0 0 2px var(--brand),0 10px 30px rgba(163,53,43,.18);animation:novo 1.6s ease-in-out infinite}
+/* pedido novo (status "recebido"): pisca em vermelho até a equipe mudar o status, como no sistema antigo */
+.cmd.novo{box-shadow:0 0 0 2px #e53935,0 10px 30px rgba(229,57,53,.25)}
+.cmd.novo .cmd-row{animation:piscar-pedido 1s ease-in-out infinite;font-weight:700}
+.cmd.novo .cmd-row .muted{color:inherit}
+.cmd.novo .badge-novo,.ped.novo .badge-novo{background:#fff;color:#b71c1c;box-shadow:0 0 0 1px #b71c1c}
 .badge-novo{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:var(--brand);color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em;align-self:flex-start}
 .cmd-body{border-top:1px solid var(--line);background:var(--surface-2);padding:16px 18px;display:flex;flex-direction:column;gap:12px;animation:expand .4s var(--out);cursor:default}
 .ped{background:var(--surface);border-radius:14px;border:1px solid var(--line);padding:14px 16px}
-.ped.novo{box-shadow:0 0 0 2px var(--brand);animation:novo 1.6s ease-in-out infinite}
+.ped.novo{box-shadow:0 0 0 2px #e53935;animation:piscar-pedido 1s ease-in-out infinite}
 .ped-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .it{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px dashed var(--line);flex-wrap:wrap}
 .it:first-of-type{border-top:0}
@@ -461,7 +465,6 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 @keyframes sheet{from{transform:translateY(100%)}to{transform:none}}
 @keyframes pop{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}
 @keyframes draw{to{stroke-dashoffset:0}}
-@keyframes novo{0%,100%{box-shadow:0 0 0 2px var(--brand),0 10px 30px rgba(163,53,43,.18)}50%{box-shadow:0 0 0 4px rgba(163,53,43,.55),0 10px 36px rgba(163,53,43,.32)}}
 @keyframes expand{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 @keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 @keyframes ding{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(-14deg)}20%{transform:rotate(12deg)}30%{transform:rotate(-8deg)}40%{transform:rotate(5deg)}}
@@ -469,6 +472,9 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .stagger>*{animation:rise .6s var(--out) both}
 .stagger>*:nth-child(2){animation-delay:.05s}.stagger>*:nth-child(3){animation-delay:.1s}.stagger>*:nth-child(4){animation-delay:.15s}.stagger>*:nth-child(5){animation-delay:.2s}.stagger>*:nth-child(6){animation-delay:.25s}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+/* o pisca do pedido novo é um alarme, não enfeite: continua mesmo com "reduzir animações" ligado no computador */
+@media (prefers-reduced-motion:reduce){.cmd.novo .cmd-row,.ped.novo{animation-duration:1s!important;animation-iteration-count:infinite!important}}
+@keyframes piscar-pedido{0%,100%{background:var(--surface);color:var(--ink)}50%{background:#e53935;color:#fff}}
 
 /* ---------- QR Codes (impressão das mesas) ---------- */
 .qr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
