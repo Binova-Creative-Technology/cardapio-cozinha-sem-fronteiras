@@ -1,7 +1,8 @@
 import { requireAuth } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { devolverEstoqueDosItens, itensDoPedido } from '@/lib/estoque';
-import { atualizarFechamentoPendente } from '@/lib/contas';
+import { atualizarFechamentoPendente, normalizarMesa } from '@/lib/contas';
+import { emitir } from '@/lib/eventos';
 
 // Exclui um pedido (os itens dele saem junto, pela chave estrangeira com "on delete cascade").
 export async function DELETE(request, { params }) {
@@ -24,6 +25,7 @@ export async function DELETE(request, { params }) {
 
   if (itens.length) await devolverEstoqueDosItens(itens);
   await atualizarFechamentoPendente(existente.mesa);
+  emitir('comanda', { mesa: normalizarMesa(existente.mesa) });
 
   return Response.json({ ok: true });
 }

@@ -8,6 +8,7 @@
 // Leia o LEIA-ME.md antes de usar.
 
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const pino = require('pino');
 const baileys = require('@whiskeysockets/baileys');
@@ -63,6 +64,17 @@ function log(...partes) {
 }
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Espera até `ms` ou até o sistema avisar (webhook POST /acordar) que entrou mensagem na fila.
+let acordar = () => {};
+const esperarOuAcordar = (ms) =>
+  new Promise((r) => {
+    const t = setTimeout(r, ms);
+    acordar = () => {
+      clearTimeout(t);
+      r();
+    };
+  });
 const aleatorio = (min, max) => Math.floor(min + Math.random() * (max - min + 1));
 
 // ---------------------------------------------------------------------------
@@ -228,8 +240,10 @@ async function lacoDeEnvio() {
     } catch (err) {
       log('Erro no envio:', err.message);
     }
-    // depois de enviar, espera um tempo aleatório antes da próxima; sem nada na fila, olha de novo em 20 s
-    await dormir(enviou ? aleatorio(PAUSA_MIN_S, PAUSA_MAX_S) * 1000 : 20000);
+    // depois de enviar, espera um tempo aleatório antes da próxima (não dá para pular: parece robô).
+    // Sem nada na fila, espera o aviso do sistema (webhook) ou olha de novo em 2 min, por garantia.
+    if (enviou) await dormir(aleatorio(PAUSA_MIN_S, PAUSA_MAX_S) * 1000);
+    else await esperarOuAcordar(120000);
   }
 }
 
@@ -246,6 +260,21 @@ conectar().catch((err) => {
   process.exit(1);
 });
 lacoDeEnvio();
+
+// Webhook: o sistema chama POST /acordar (com a mesma chave) quando coloca mensagem na fila.
+// Só sobe se houver PORT (no Railway); no computador do restaurante continua só com a checagem.
+if (env.PORT) {
+  http
+    .createServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/acordar' && req.headers.authorization === 'Bearer ' + CHAVE) {
+        acordar();
+        res.writeHead(204).end();
+      } else {
+        res.writeHead(req.url === '/' ? 200 : 404).end();
+      }
+    })
+    .listen(Number(env.PORT), '::', () => log('Aguardando avisos do sistema na porta ' + env.PORT + '.'));
+}
 
 process.on('SIGINT', async () => {
   estado = 'desconectado';

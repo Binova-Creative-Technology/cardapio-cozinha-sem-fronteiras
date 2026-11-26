@@ -181,7 +181,26 @@ function Painel({ config, onLogout, onConfigAtualizado }) {
       Notification.requestPermission();
     }
 
-    const intervalo = setInterval(async () => {
+    // uma checagem por vez (aviso, reconexão e reserva podem chegar juntos; o alarme não pode tocar 2x)
+    let checando = false;
+    let deNovo = false;
+    const verificar = async () => {
+      if (checando) {
+        deNovo = true;
+        return;
+      }
+      checando = true;
+      try {
+        await checarNovidades();
+      } finally {
+        checando = false;
+        if (deNovo) {
+          deNovo = false;
+          verificar();
+        }
+      }
+    };
+    const checarNovidades = async () => {
       try {
         const { ultimoId } = await api('/pedidos/ultimo-id');
         if (ultimoIdPedido.current === null) {
@@ -222,9 +241,27 @@ function Painel({ config, onLogout, onConfigAtualizado }) {
       } catch (e) {
         /* tenta de novo no próximo ciclo */
       }
-    }, 6000);
+    };
 
-    return () => clearInterval(intervalo);
+    // O servidor avisa na hora (SSE) quando chega pedido ou pedido de conta; a checagem a cada
+    // 60 s fica só de reserva (conexão caiu, servidor reiniciou). Ao reconectar, confere de novo.
+    const intervalo = setInterval(verificar, 60000);
+    let fonte = null;
+    if (window.EventSource) {
+      fonte = new EventSource('/api/admin/eventos');
+      fonte.onopen = verificar;
+      fonte.onmessage = (e) => {
+        try {
+          const { canal } = JSON.parse(e.data);
+          if (canal === 'pedido' || canal === 'fechamento') verificar();
+        } catch {}
+      };
+    }
+
+    return () => {
+      clearInterval(intervalo);
+      fonte?.close();
+    };
   }, [carregarFechamentos]);
 
   async function sair() {
@@ -2407,8 +2444,22 @@ function AbaWhatsapp() {
 
   useEffect(() => {
     carregar();
-    const timer = setInterval(carregar, 5000); // acompanha o QR e as mensagens
-    return () => clearInterval(timer);
+    // o servidor avisa quando o estado do WhatsApp ou a fila mudam; checagem lenta só de reserva
+    const timer = setInterval(carregar, 30000);
+    let fonte = null;
+    if (window.EventSource) {
+      fonte = new EventSource('/api/admin/eventos');
+      fonte.onopen = carregar;
+      fonte.onmessage = (e) => {
+        try {
+          if (JSON.parse(e.data).canal === 'whatsapp') carregar();
+        } catch {}
+      };
+    }
+    return () => {
+      clearInterval(timer);
+      fonte?.close();
+    };
   }, [carregar]);
 
   async function salvar() {

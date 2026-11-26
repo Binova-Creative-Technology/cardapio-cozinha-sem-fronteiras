@@ -1326,10 +1326,17 @@ function DetalheComanda({ config, comandaId, mesaUrl, temOutras, onPedirMais, on
         .catch((err) => ativo && setErro(err.message));
     }
     carregar();
-    const intervalo = setInterval(carregar, 10000);
+    // o servidor avisa quando algo muda nesta comanda (status do pedido, conta); checagem lenta só de reserva
+    const intervalo = setInterval(carregar, 60000);
+    const fonte = window.EventSource ? new EventSource('/api/eventos?comanda=' + encodeURIComponent(comandaId)) : null;
+    if (fonte) {
+      fonte.onopen = carregar;
+      fonte.onmessage = carregar;
+    }
     return () => {
       ativo = false;
       clearInterval(intervalo);
+      fonte?.close();
     };
   }, [comandaId, fechando]);
 

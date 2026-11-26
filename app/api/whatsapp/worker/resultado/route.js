@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { tokenValido } from '@/lib/whatsapp';
+import { emitir } from '@/lib/eventos';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +16,7 @@ export async function POST(request) {
   const db = supabaseAdmin();
   if (body.ok) {
     await db.from('csf_whatsapp_mensagens').update({ status: 'enviada', enviado_em: new Date().toISOString(), erro: null }).eq('id', id);
+    emitir('whatsapp');
     return Response.json({ ok: true });
   }
 
@@ -24,5 +26,6 @@ export async function POST(request) {
     .from('csf_whatsapp_mensagens')
     .update({ status: esgotou ? 'erro' : 'pendente', erro: String(body.erro || 'Falha ao enviar').slice(0, 300) })
     .eq('id', id);
+  emitir('whatsapp');
   return Response.json({ ok: true });
 }

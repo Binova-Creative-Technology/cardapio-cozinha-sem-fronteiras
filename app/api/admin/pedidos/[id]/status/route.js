@@ -1,7 +1,8 @@
 import { requireAuth } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { devolverEstoqueDosItens, rebaixarEstoqueDosItens, itensDoPedido } from '@/lib/estoque';
-import { atualizarFechamentoPendente } from '@/lib/contas';
+import { atualizarFechamentoPendente, normalizarMesa } from '@/lib/contas';
+import { emitir } from '@/lib/eventos';
 
 const STATUS_VALIDOS = ['recebido', 'em preparo', 'pronto', 'entregue', 'cancelado'];
 
@@ -31,6 +32,7 @@ export async function PATCH(request, { params }) {
   }
   // cancelar/reabrir muda o valor da conta, se ela já foi pedida e ainda não foi concluída
   if ((atual.status === 'cancelado') !== (status === 'cancelado')) await atualizarFechamentoPendente(atual.mesa);
+  emitir('comanda', { mesa: normalizarMesa(atual.mesa) });
 
   return Response.json({ ok: true });
 }

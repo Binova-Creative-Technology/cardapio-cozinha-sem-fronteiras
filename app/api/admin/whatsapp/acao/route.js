@@ -1,7 +1,7 @@
 import { requireAuth } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getConfig } from '@/lib/config';
-import { lerConfigWhatsapp, montarTexto, normalizarTelefone } from '@/lib/whatsapp';
+import { lerConfigWhatsapp, montarTexto, normalizarTelefone, acordarWorker } from '@/lib/whatsapp';
 
 // Ações da tela WhatsApp. Body:
 //  { acao: 'teste', telefone }      -> manda a mensagem de agradecimento para o número informado (teste)
@@ -27,6 +27,7 @@ export async function POST(request) {
     });
     const { error } = await db.from('csf_whatsapp_mensagens').insert({ nome: 'Teste', telefone, texto });
     if (error) return Response.json({ erro: error.message }, { status: 500 });
+    acordarWorker();
     return Response.json({ ok: true, avisoDesligado: !config.ativo });
   }
 
@@ -35,6 +36,7 @@ export async function POST(request) {
 
   if (body?.acao === 'reenviar') {
     await db.from('csf_whatsapp_mensagens').update({ status: 'pendente', tentativas: 0, erro: null }).eq('id', id).eq('status', 'erro');
+    acordarWorker();
     return Response.json({ ok: true });
   }
   if (body?.acao === 'cancelar') {

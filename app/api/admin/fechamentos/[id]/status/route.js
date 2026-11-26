@@ -1,6 +1,8 @@
 import { requireAuth } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { enfileirarAgradecimento } from '@/lib/whatsapp';
+import { enfileirarAgradecimento, acordarWorker } from '@/lib/whatsapp';
+import { emitir } from '@/lib/eventos';
+import { normalizarMesa } from '@/lib/contas';
 
 export async function PATCH(request, { params }) {
   const naoAutenticado = await requireAuth();
@@ -32,10 +34,12 @@ export async function PATCH(request, { params }) {
   if (status === 'concluido' && anterior?.status !== 'concluido' && fechamento) {
     try {
       whatsapp = await enfileirarAgradecimento(fechamento);
+      if (whatsapp?.enfileirada) acordarWorker();
     } catch {
       whatsapp = { enfileirada: false, motivo: 'erro' };
     }
   }
 
+  if (fechamento) emitir('comanda', { mesa: normalizarMesa(fechamento.mesa) });
   return Response.json({ ok: true, whatsapp });
 }

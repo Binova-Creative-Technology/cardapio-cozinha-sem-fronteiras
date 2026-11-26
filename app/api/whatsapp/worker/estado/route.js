@@ -1,5 +1,6 @@
 import { setConfig } from '@/lib/config';
 import { tokenValido } from '@/lib/whatsapp';
+import { emitir } from '@/lib/eventos';
 
 export const runtime = 'nodejs';
 
@@ -22,5 +23,6 @@ export async function POST(request) {
       atualizadoEm: new Date().toISOString(),
     }),
   );
+  emitir('whatsapp');
   return Response.json({ ok: true });
 }
