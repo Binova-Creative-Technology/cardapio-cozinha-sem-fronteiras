@@ -2354,6 +2354,60 @@ function QrItem({ mesa, url, selecionado }) {
   );
 }
 
+// Link do cardápio só para olhar (sem pedido), para mandar aos clientes
+function LinkDoCardapio() {
+  const [link, setLink] = useState('');
+  const [copiado, setCopiado] = useState(false);
+
+  useEffect(() => {
+    setLink((process.env.NEXT_PUBLIC_SITE_URL || window.location.origin).replace(/\/+$/, '') + '/cardapio');
+  }, []);
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      prompt('Copie o link:', link);
+    }
+  }
+
+  if (!link) return null;
+  return (
+    <div className="panel sem-impressao">
+      <div className="panel-h"><h3>Link do cardápio para enviar aos clientes</h3></div>
+      <p className="hint" style={{ margin: '0 0 8px' }}>
+        O cliente só olha os pratos, fotos e preços. Não consegue fazer pedido por este link.
+      </p>
+      <p style={{ margin: '0 0 12px', fontWeight: 700, wordBreak: 'break-all', userSelect: 'all' }}>{link}</p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="btn md" type="button" onClick={copiar}>
+          {copiado ? 'Link copiado!' : 'Copiar link'}
+        </button>
+        <a
+          className="btn md line"
+          href={'https://wa.me/?text=' + encodeURIComponent('Veja o nosso cardápio: ' + link)}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+        >
+          Enviar no WhatsApp
+        </a>
+        <a
+          className="btn md line"
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+        >
+          Ver como o cliente
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function AbaQrCodes() {
   const [de, setDe] = useState(1);
   const [ate, setAte] = useState(10);
@@ -2381,6 +2435,7 @@ function AbaQrCodes() {
   return (
     <>
       <div className="topbar"><h1>QR Codes</h1></div>
+      <LinkDoCardapio />
       <div className="panel">
         <div className="panel-h"><h3>Gerar QR Codes por mesa</h3></div>
         <div className="linha-form">

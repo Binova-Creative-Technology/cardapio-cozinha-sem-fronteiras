@@ -505,7 +505,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 
 @media print {
   header.topo, nav.abas, .linha-form, #qr-endereco, .btn-imprimir-um,
-  .side, .topbar {
+  .side, .topbar, .sem-impressao {
     display: none !important;
   }
   body, .painel main, .main { background: #fff; padding: 0; margin: 0; }
