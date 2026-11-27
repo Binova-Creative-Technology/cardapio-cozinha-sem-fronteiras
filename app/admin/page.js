@@ -1670,6 +1670,7 @@ function AbaCardapio() {
   return (
     <>
       <div className="topbar"><h1>Cardápio</h1></div>
+      <LinkDoCardapio />
       <section className="panel rise">
         <div className="panel-h"><h3>Fotos</h3></div>
         <p style={{ fontSize: '0.9rem', color: '#666', margin: '0 0 10px' }}>
